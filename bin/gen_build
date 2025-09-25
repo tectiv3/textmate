@@ -1,4 +1,4 @@
-#!/System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby
+#!/usr/bin/env ruby
 require 'optparse'
 
 if __FILE__ == $PROGRAM_NAME
