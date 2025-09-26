@@ -3,7 +3,7 @@ require 'optparse'
 require 'erb'
 
 def expand_tpl(str, binding)
-  ERB.new(str, 0, '%-').result(binding)
+  ERB.new(str, trim_mode: '%-').result(binding)
 end
 
 def expand_tpl_file(path, binding)
