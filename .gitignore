@@ -5,3 +5,4 @@ Frameworks/license/src/revoked_serials.cc
 build*/
 CMakeUserPresets.json
 build-output.log
+*.bak

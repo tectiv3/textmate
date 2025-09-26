@@ -67,9 +67,7 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 		_extractorDispatchGroup = dispatch_group_create();
 
 		_progress.kind = NSProgressKindFile;
-		if(@available(macos 10.13, *))
-				_progress.fileOperationKind = NSProgressFileOperationKindDownloading;
-		else	[_progress setUserInfoObject:NSProgressFileOperationKindDownloading forKey:NSProgressFileOperationKindKey];
+		_progress.fileOperationKind = NSProgressFileOperationKindDownloading;
 		_progress.localizedDescription = [NSString stringWithFormat:@"Downloading %@…", url.lastPathComponent];
 
 		NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:60];
@@ -129,39 +127,18 @@ static NSString* GetHardwareInfo (int field, BOOL isInteger = NO)
 			dispatch_group_leave(group);
 		};
 
-		if(@available(macos 10.13, *))
+		if(![_extractorTask launchAndReturnError:&error])
 		{
-			if(![_extractorTask launchAndReturnError:&error])
-			{
-				os_log_error(OS_LOG_DEFAULT, "Failed to launch tar: %{public}@", error.localizedDescription);
+			os_log_error(OS_LOG_DEFAULT, "Failed to launch tar: %{public}@", error.localizedDescription);
 
-				dispatch_group_leave(_extractorDispatchGroup); // Completion handler will never be called
-				[outputPipe.fileHandleForWriting closeFile];
-				[errorPipe.fileHandleForWriting closeFile];
+			dispatch_group_leave(_extractorDispatchGroup); // Completion handler will never be called
+			[outputPipe.fileHandleForWriting closeFile];
+			[errorPipe.fileHandleForWriting closeFile];
 
-				_extractorTask  = nil;
-				_extractorError = error;
+			_extractorTask  = nil;
+			_extractorError = error;
 
-				return nil;
-			}
-		}
-		else
-		{
-			@try {
-				[_extractorTask launch];
-			}
-			@catch (NSException* e) {
-				os_log_error(OS_LOG_DEFAULT, "-[NSTask launch]: %{public}@", e.reason);
-
-				dispatch_group_leave(_extractorDispatchGroup); // Completion handler will never be called
-				[outputPipe.fileHandleForWriting closeFile];
-				[errorPipe.fileHandleForWriting closeFile];
-
-				_extractorTask  = nil;
-				_extractorError = [NSError errorWithDomain:@"OakDownloadManager" code:0 userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"-[NSTask launch]: %@", e.reason] }];
-
-				return nil;
-			}
+			return nil;
 		}
 		_extractorFileHandle = inputPipe.fileHandleForWriting;
 	}
