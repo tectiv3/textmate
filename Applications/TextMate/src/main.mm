@@ -48,7 +48,7 @@ static void increase_max_open_files (rlim_t required = 2048)
 
 int main (int argc, char const* argv[])
 {
-	oak::application_t::set_support(path::join(path::home(), "Library/Application Support/TextMate-dev"));
+	oak::application_t::set_support(path::join(path::home(), "Library/Application Support/TextMate"));
 	oak::application_t app(argc, argv);
 
 	increase_max_open_files();

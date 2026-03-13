@@ -497,7 +497,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 	};
 
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
-	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate-dev/Global.tmProperties"));
+	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
 
 	[NSUserDefaults.standardUserDefaults registerDefaults:@{
 		@"NSRecentDocumentsLimit": @25,
@@ -507,7 +507,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	[TMPlugInController.sharedInstance loadAllPlugIns:nil];
 
-	std::string dest = path::join(path::home(), "Library/Application Support/TextMate-dev/Managed");
+	std::string dest = path::join(path::home(), "Library/Application Support/TextMate/Managed");
 	if(!path::exists(dest))
 	{
 		if(NSString* archive = [[NSBundle mainBundle] pathForResource:@"DefaultBundles" ofType:@"tbz"])
