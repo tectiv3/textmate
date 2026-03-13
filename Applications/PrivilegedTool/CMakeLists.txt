@@ -1,0 +1,4 @@
+add_executable(PrivilegedTool)
+file(GLOB _src src/*.cc)
+target_sources(PrivilegedTool PRIVATE ${_src})
+target_link_libraries(PrivilegedTool PRIVATE authorization io text)
