@@ -43,8 +43,8 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE
   "-flto=thin -Wl,-dead_strip -Wl,-dead_strip_dylibs -Wl,-cache_path_lto,${CMAKE_BINARY_DIR}/.lto-cache"
   CACHE STRING "" FORCE)
 
-# ObjC runtime linking
-add_link_options(-fobjc-link-runtime)
+# ObjC runtime linking + force-load ObjC categories from static libraries
+add_link_options(-fobjc-link-runtime -ObjC)
 
 # Dependencies
 find_package(Boost REQUIRED)
