@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(find:*)",
-      "Bash(ls -la:*)"
+      "Bash(ls -la:*)",
+      "Bash(git add:*)"
     ]
   }
 }
