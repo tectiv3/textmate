@@ -3,7 +3,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(ls -la:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
