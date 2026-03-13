@@ -76,8 +76,7 @@ file(GLOB _fw_res
   "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/gfx/CloseButton/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/resources/Charsets.plist"
   "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/gfx/Bundle Item Icons/*.png"
-  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/*.icns"
-  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/bindings.plist"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakTabBarView/gfx/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/FileBrowser/resources/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/DocumentWindow/resources/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/SoftwareUpdate/resources/*.tiff"
@@ -87,6 +86,14 @@ file(GLOB _fw_res
 target_sources(TextMate PRIVATE ${_fw_res})
 set_source_files_properties(${_fw_res} PROPERTIES
   MACOSX_PACKAGE_LOCATION Resources)
+
+# TMFileReference resources go in Resources/DocumentTypes/ subdirectory
+file(GLOB _doctype_res
+  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/*.icns"
+  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/bindings.plist")
+target_sources(TextMate PRIVATE ${_doctype_res})
+set_source_files_properties(${_doctype_res} PROPERTIES
+  MACOSX_PACKAGE_LOCATION "Resources/DocumentTypes")
 
 # Markdown → HTML for About window (uses existing bin/gen_html Ruby script)
 file(GLOB _about_md about/*.md)
