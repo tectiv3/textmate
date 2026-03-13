@@ -48,7 +48,6 @@ add_link_options(-fobjc-link-runtime -ObjC)
 
 # Dependencies
 find_package(Boost REQUIRED)
-find_program(RAGEL_EXECUTABLE ragel REQUIRED)
 
 # Global include paths for PCH dependencies
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})

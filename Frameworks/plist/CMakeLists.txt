@@ -6,7 +6,4 @@ target_include_directories(plist PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(plist PUBLIC text cf io "-framework CoreFoundation" "-framework Foundation")
 
-# Ragel sources
-target_ragel_sources(plist src/ascii.rl)
-
 textmate_add_tests(plist)

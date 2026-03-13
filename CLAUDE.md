@@ -32,7 +32,7 @@ make clean           # Remove all build dirs
 
 ### Dependencies
 
-ragel, boost, ninja, cmake
+boost, ninja, cmake
 
 ### Build Quirks
 

@@ -16,24 +16,6 @@ function(textmate_framework TARGET)
   target_include_directories(${TARGET} PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/include")
 endfunction()
 
-# Ragel state machine compilation (.rl → .cc or .mm)
-function(target_ragel_sources TARGET)
-  foreach(_rl ${ARGN})
-    get_filename_component(_name "${_rl}" NAME)
-    string(REGEX REPLACE "\\.rl$" "" _out_name "${_name}")
-    if(NOT _out_name MATCHES "\\.(cc|mm)$")
-      set(_out_name "${_out_name}.cc")
-    endif()
-    set(_out "${CMAKE_CURRENT_BINARY_DIR}/${_out_name}")
-    add_custom_command(
-      OUTPUT "${_out}"
-      COMMAND "${RAGEL_EXECUTABLE}" -o "${_out}" "${CMAKE_CURRENT_SOURCE_DIR}/${_rl}"
-      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${_rl}"
-      COMMENT "Ragel: ${_rl}")
-    target_sources(${TARGET} PRIVATE "${_out}")
-  endforeach()
-endfunction()
-
 # Xib compilation (.xib → .nib via ibtool)
 function(target_xib_sources TARGET RESOURCE_LOCATION)
   foreach(_xib ${ARGN})
