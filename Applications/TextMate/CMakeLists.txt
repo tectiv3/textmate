@@ -20,6 +20,7 @@ target_include_directories(TextMate PRIVATE
 
 # Info.plist variable expansion
 set(TARGET_NAME "TextMate")
+set(BUNDLE_IDENTIFIER "com.macromates.TextMate-dev")
 set(APP_MIN_OS "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 set(APP_VERSION "${TEXTMATE_VERSION}")
 string(TIMESTAMP YEAR "%Y")
