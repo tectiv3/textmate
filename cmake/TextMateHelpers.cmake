@@ -39,13 +39,18 @@ function(target_xib_sources TARGET RESOURCE_LOCATION)
   foreach(_xib ${ARGN})
     get_filename_component(_name "${_xib}" NAME_WE)
     set(_nib "${CMAKE_CURRENT_BINARY_DIR}/${_name}.nib")
+    if(IS_ABSOLUTE "${_xib}")
+      set(_xib_abs "${_xib}")
+    else()
+      set(_xib_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_xib}")
+    endif()
     add_custom_command(
       OUTPUT "${_nib}"
       COMMAND xcrun ibtool --compile "${_nib}"
         --errors --warnings --notices
         --output-format human-readable-text
-        "${CMAKE_CURRENT_SOURCE_DIR}/${_xib}"
-      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${_xib}"
+        "${_xib_abs}"
+      DEPENDS "${_xib_abs}"
       COMMENT "Xib: ${_xib}")
     target_sources(${TARGET} PRIVATE "${_nib}")
     set_source_files_properties("${_nib}" PROPERTIES

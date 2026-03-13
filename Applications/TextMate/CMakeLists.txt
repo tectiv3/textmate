@@ -42,6 +42,23 @@ add_custom_command(TARGET TextMate POST_BUILD
 set_target_properties(TextMate PROPERTIES
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
 
+# Compile xib → nib (all xibs from TextMate and frameworks go into the app bundle)
+target_xib_sources(TextMate "English.lproj"
+  resources/English.lproj/MainMenu.xib
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakTextView/resources/English.lproj/TabSizeSetting.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/Preferences/resources/English.lproj/TerminalPreferences.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/resources/English.lproj/CustomizeEncodings.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/resources/English.lproj/Pasteboard Selector.xib")
+target_xib_sources(TextMate "English.lproj"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/BundleProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/FileDropProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/CommandProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/SharedProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/SnippetProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/ThemeProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/MacroProperties.xib"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/resources/English.lproj/GrammarProperties.xib")
+
 # Icon and image resources
 file(GLOB _icons icons/*.icns)
 file(GLOB _resources resources/*)
