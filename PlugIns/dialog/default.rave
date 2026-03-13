@@ -1,0 +1,20 @@
+target "tm_dialog2" {
+	sources    tm_dialog2.mm
+	executable "${target}"
+	frameworks Foundation
+}
+
+target "Dialog2" {
+	add LN_FLAGS "-bundle"
+
+	prefix "${target}.tmplugin/Contents"
+
+	files English.lproj "Resources"
+	files @tm_dialog2   "Resources"
+	files Info.plist    "."
+
+	sources CLIProxy.mm Dialog2.mm OptionParser.mm TMDCommand.mm
+	sources Commands/**/*.mm
+	executable "MacOS/${target}"
+	frameworks Cocoa WebKit Quartz
+}

@@ -1,0 +1,19 @@
+target "tm_dialog" {
+	sources    tm_dialog.mm
+	executable "${target}"
+	frameworks Foundation
+}
+
+target "Dialog" {
+	add LN_FLAGS "-bundle"
+
+	prefix "${target}.tmplugin/Contents"
+
+	files English.lproj "Resources"
+	files @tm_dialog    "Resources"
+	files Info.plist    "."
+
+	sources Dialog.mm TMDChameleon.mm TMDSemaphore.mm
+	executable "MacOS/${target}"
+	frameworks Cocoa
+}
