@@ -67,6 +67,27 @@ target_sources(TextMate PRIVATE ${_all_resources})
 set_source_files_properties(${_all_resources} PROPERTIES
   MACOSX_PACKAGE_LOCATION Resources)
 
+# Framework resources (static libs can't carry resources, so they go in the app bundle)
+file(GLOB _fw_res
+  "${CMAKE_SOURCE_DIR}/Frameworks/Preferences/icons/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakTextView/resources/*.pdf"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakTextView/resources/*.tiff"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakTextView/resources/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/gfx/CloseButton/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/OakAppKit/resources/Charsets.plist"
+  "${CMAKE_SOURCE_DIR}/Frameworks/BundleEditor/gfx/Bundle Item Icons/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/*.icns"
+  "${CMAKE_SOURCE_DIR}/Frameworks/TMFileReference/resources/bindings.plist"
+  "${CMAKE_SOURCE_DIR}/Frameworks/FileBrowser/resources/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/DocumentWindow/resources/*.png"
+  "${CMAKE_SOURCE_DIR}/Frameworks/SoftwareUpdate/resources/*.tiff"
+  "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.html"
+  "${CMAKE_SOURCE_DIR}/Frameworks/scm/resources/*.xslt"
+)
+target_sources(TextMate PRIVATE ${_fw_res})
+set_source_files_properties(${_fw_res} PROPERTIES
+  MACOSX_PACKAGE_LOCATION Resources)
+
 # Markdown → HTML for About window (uses existing bin/gen_html Ruby script)
 file(GLOB _about_md about/*.md)
 foreach(_md ${_about_md})
