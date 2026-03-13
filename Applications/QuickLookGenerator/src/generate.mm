@@ -2,6 +2,7 @@
 #import "plugin.h"
 #import <buffer/buffer.h>
 #import <bundles/bundles.h>
+#import <OakSystem/application.h>
 #import <file/bytes.h>
 #import <file/type.h>
 #import <file/reader.h>
@@ -27,7 +28,7 @@ static void initialize (CFBundleRef generatorBundle)
 		NSBundle* parentBundle = [NSBundle bundleWithPath:parentBundlePath];
 
 		settings_t::set_default_settings_path([[parentBundle pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
-		settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
+		settings_t::set_global_settings_path(oak::application_t::support("Global.tmProperties"));
 
 		// Load bundle index
 		std::vector<std::string> paths;
