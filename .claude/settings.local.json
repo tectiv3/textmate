@@ -12,7 +12,10 @@
       "Bash(./build.sh 2>&1 | tail -100)",
       "Bash(bash build.sh 2>&1 | tee build-output.log; echo \"EXIT_CODE: $?\")",
       "Bash(bash build.sh 2>&1 | tee build-output.log)",
-      "Bash(bash build.sh)"
+      "Bash(bash build.sh)",
+      "Bash(gh pr:*)",
+      "Bash(gh search:*)",
+      "Bash(gh api:*)"
     ]
   }
 }

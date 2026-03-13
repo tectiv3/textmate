@@ -1,6 +1,6 @@
 # rave: require text cf io plist OakSystem regexp, libraries curl, frameworks SystemConfiguration Security
 add_library(network STATIC)
-file(GLOB _src src/*.cc)
+file(GLOB _src src/*.cc src/*.mm)
 target_sources(network PRIVATE ${_src})
 # Can't use textmate_framework(network) — "network/" symlink shadows
 # Apple's Network.framework on case-insensitive macOS. Use PRIVATE include
