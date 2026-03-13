@@ -3,6 +3,11 @@ add_library(plist STATIC)
 file(GLOB _src src/*.cc)
 target_sources(plist PRIVATE ${_src})
 textmate_framework(plist)
+# Generated files (ragel, capnp) include headers from src/
+target_include_directories(plist PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  "${CMAKE_CURRENT_BINARY_DIR}"
+  "${CMAKE_CURRENT_BINARY_DIR}/src")
 target_link_libraries(plist PUBLIC text cf io "-framework CoreFoundation")
 
 # Ragel sources

@@ -13,6 +13,11 @@ target_link_libraries(TextMate PRIVATE
 
 target_link_libraries(TextMate PRIVATE "-framework Cocoa")
 
+# network headers need special handling — can't use <network/...> include
+# path because it shadows Apple's Network.framework on case-insensitive macOS
+target_include_directories(TextMate PRIVATE
+  "${CMAKE_SOURCE_DIR}/Frameworks/network/src")
+
 # Info.plist variable expansion
 set(TARGET_NAME "TextMate")
 set(APP_MIN_OS "${CMAKE_OSX_DEPLOYMENT_TARGET}")
@@ -24,6 +29,15 @@ else()
   set(CS_GET_TASK_ALLOW "false")
 endif()
 configure_file(Info.plist ${CMAKE_CURRENT_BINARY_DIR}/Info.plist)
+
+# Expand ${YEAR} in InfoPlist.strings — overwrite source copy in bundle
+configure_file(
+  resources/English.lproj/InfoPlist.strings
+  ${CMAKE_CURRENT_BINARY_DIR}/English.lproj/InfoPlist.strings)
+add_custom_command(TARGET TextMate POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy
+    "${CMAKE_CURRENT_BINARY_DIR}/English.lproj/InfoPlist.strings"
+    "$<TARGET_BUNDLE_DIR:TextMate>/Contents/Resources/English.lproj/InfoPlist.strings")
 set_target_properties(TextMate PROPERTIES
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
 
@@ -46,6 +60,7 @@ foreach(_md ${_about_md})
       -h "${CMAKE_CURRENT_SOURCE_DIR}/templates/header.html"
       -f "${CMAKE_CURRENT_SOURCE_DIR}/templates/footer.html"
       "${_md}" > "${_html}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     DEPENDS "${_md}" "${CMAKE_SOURCE_DIR}/bin/gen_html"
     COMMENT "gen_html: ${_name}.md")
   target_sources(TextMate PRIVATE "${_html}")

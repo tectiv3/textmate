@@ -51,6 +51,11 @@ find_package(Boost REQUIRED)
 find_package(CapnProto REQUIRED)
 find_program(RAGEL_EXECUTABLE ragel REQUIRED)
 
+# Global include paths for PCH dependencies
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+find_path(SPARSEHASH_INCLUDE_DIR sparsehash/dense_hash_map REQUIRED)
+include_directories(SYSTEM ${SPARSEHASH_INCLUDE_DIR})
+
 # Version extraction (replaces rave `capture` command)
 file(STRINGS "${CMAKE_SOURCE_DIR}/Applications/TextMate/about/Changes.md"
   _version_line REGEX "^## [0-9]" LIMIT_COUNT 1)
@@ -59,16 +64,24 @@ string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" TEXTMATE_VERSION "${_version_li
 # Shared includes
 include_directories(Shared/include)
 
+# Precompiled headers — force-include per language (matches rave's PCH behavior)
+include_directories(Shared/PCH)
+add_compile_options(
+  $<$<COMPILE_LANGUAGE:C>:-include${CMAKE_SOURCE_DIR}/Shared/PCH/prelude.c>
+  $<$<COMPILE_LANGUAGE:CXX>:-include${CMAKE_SOURCE_DIR}/Shared/PCH/prelude.cc>
+  $<$<COMPILE_LANGUAGE:OBJC>:-include${CMAKE_SOURCE_DIR}/Shared/PCH/prelude.m>
+  $<$<COMPILE_LANGUAGE:OBJCXX>:-include${CMAKE_SOURCE_DIR}/Shared/PCH/prelude.mm>
+)
+
 # Helpers
 include(cmake/TextMateHelpers.cmake)
 
 # Code signing identity
 set(CS_IDENTITY "-" CACHE STRING "Code signing identity (- for ad-hoc)")
 
-# Debug-only OakDebug dependency (rave: `require OakDebug` in debug config)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(TEXTMATE_DEBUG_LIBS OakDebug)
-endif()
+# OakDebug provides oak::to_s and OakBadAssertion symbols used pervasively
+# through header templates — needed in all build configs, not just debug
+set(TEXTMATE_DEBUG_LIBS OakDebug)
 
 # === Vendor ===
 add_subdirectory(vendor/Onigmo)
@@ -105,7 +118,7 @@ add_subdirectory(Frameworks/theme)
 # === Services ===
 add_subdirectory(Frameworks/scm)
 add_subdirectory(Frameworks/network)
-add_subdirectory(Frameworks/updater)
+# add_subdirectory(Frameworks/updater)  # disabled — not needed
 add_subdirectory(Frameworks/file)
 add_subdirectory(Frameworks/command)
 add_subdirectory(Frameworks/layout)
@@ -134,7 +147,7 @@ add_subdirectory(Frameworks/CommitWindow)
 
 # === Applications ===
 add_subdirectory(Applications/mate)
-add_subdirectory(Applications/bl)
+# add_subdirectory(Applications/bl)  # disabled — depends on updater
 add_subdirectory(Applications/gtm)
 add_subdirectory(Applications/indent)
 add_subdirectory(Applications/pretty_plist)

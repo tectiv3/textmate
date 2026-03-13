@@ -29,7 +29,7 @@
 #import <bundles/query.h>
 #import <io/path.h>
 #import <regexp/glob.h>
-#import <network/tbz.h>
+#import "tbz.h"
 #import <ns/ns.h>
 #import <settings/settings.h>
 #import <oak/debug.h>

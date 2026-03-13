@@ -2,7 +2,7 @@
 add_executable(SyntaxMate)
 file(GLOB _src src/*.mm)
 target_sources(SyntaxMate PRIVATE ${_src})
-target_link_libraries(SyntaxMate PRIVATE file theme)
+target_link_libraries(SyntaxMate PRIVATE file theme OakDebug)
 
 set_target_properties(SyntaxMate PROPERTIES
   MACOSX_BUNDLE TRUE

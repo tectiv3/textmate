@@ -10,5 +10,5 @@ set_target_properties(TextMateQL PROPERTIES
 
 target_link_options(TextMateQL PRIVATE -bundle)
 target_link_libraries(TextMateQL PRIVATE
-  OakFoundation buffer bundles cf file io ns plist scope settings theme
+  OakFoundation buffer bundles cf file io ns plist scope settings theme OakDebug
   "-framework CoreFoundation" "-framework QuickLook" "-framework AppKit" "-framework OSAKit")

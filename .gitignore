@@ -4,3 +4,4 @@ Frameworks/license/src/revoked_serials.cc
 .DS_Store
 build*/
 CMakeUserPresets.json
+build-output.log

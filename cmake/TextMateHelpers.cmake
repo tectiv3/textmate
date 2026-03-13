@@ -7,6 +7,7 @@
 function(textmate_framework TARGET)
   set(_link "${CMAKE_CURRENT_BINARY_DIR}/include/${TARGET}")
   if(NOT EXISTS "${_link}")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include")
     file(CREATE_LINK
       "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${_link}"
@@ -97,10 +98,12 @@ function(textmate_embed APP_TARGET DEP_TARGET LOCATION)
   cmake_parse_arguments(_EMB "DIRECTORY" "" "" ${ARGN})
   add_dependencies(${APP_TARGET} ${DEP_TARGET})
   if(_EMB_DIRECTORY)
+    # Use rsync to preserve the bundle directory name (cmake copy_directory
+    # copies contents, not the directory itself)
     add_custom_command(TARGET ${APP_TARGET} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_directory
+      COMMAND rsync -a
         "$<TARGET_BUNDLE_DIR:${DEP_TARGET}>"
-        "$<TARGET_BUNDLE_DIR:${APP_TARGET}>/Contents/${LOCATION}")
+        "$<TARGET_BUNDLE_DIR:${APP_TARGET}>/Contents/${LOCATION}/")
   else()
     add_custom_command(TARGET ${APP_TARGET} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy
@@ -120,7 +123,14 @@ function(textmate_add_tests FRAMEWORK_TARGET)
   endif()
 
   set(_test_target "${FRAMEWORK_TARGET}_tests")
-  set(_runner "${CMAKE_CURRENT_BINARY_DIR}/test_runner.cc")
+
+  # Use .mm extension when any test source is ObjC++ so runner compiles correctly
+  file(GLOB _mm_tests "${CMAKE_CURRENT_SOURCE_DIR}/tests/t_*.mm")
+  if(_mm_tests)
+    set(_runner "${CMAKE_CURRENT_BINARY_DIR}/test_runner.mm")
+  else()
+    set(_runner "${CMAKE_CURRENT_BINARY_DIR}/test_runner.cc")
+  endif()
 
   add_custom_command(
     OUTPUT "${_runner}"
@@ -128,7 +138,8 @@ function(textmate_add_tests FRAMEWORK_TARGET)
     DEPENDS ${_test_sources} "${CMAKE_SOURCE_DIR}/bin/gen_test"
     COMMENT "gen_test: ${FRAMEWORK_TARGET}")
 
-  add_executable(${_test_target} "${_runner}" ${_test_sources})
+  # gen_test inlines test source bodies into the runner — don't compile them separately
+  add_executable(${_test_target} "${_runner}")
   target_link_libraries(${_test_target} PRIVATE ${FRAMEWORK_TARGET} ${TEXTMATE_DEBUG_LIBS})
   target_include_directories(${_test_target} PRIVATE "${CMAKE_SOURCE_DIR}/Shared/include")
   add_test(NAME ${FRAMEWORK_TARGET} COMMAND ${_test_target})

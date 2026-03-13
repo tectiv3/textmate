@@ -12,9 +12,16 @@ file(GLOB _vendor vendor/reg*.c vendor/st.c)
 
 target_sources(Onigmo PRIVATE ${_src} ${_enc} ${_vendor})
 
-# Onigmo exports vendor/oniguruma.h, not from src/
+# Create symlink so <Onigmo/oniguruma.h> resolves
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include")
+if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/include/Onigmo")
+  file(CREATE_LINK
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/Onigmo"
+    SYMBOLIC)
+endif()
 target_include_directories(Onigmo PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+  "${CMAKE_CURRENT_BINARY_DIR}/include")
 target_include_directories(Onigmo PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
