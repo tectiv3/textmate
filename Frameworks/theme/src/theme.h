@@ -148,7 +148,7 @@ private:
 	std::string _font_name;
 	CGFloat _font_size;
 
-	mutable google::dense_hash_map<scope::scope_t, styles_t> _cache;
+	mutable std::unordered_map<scope::scope_t, styles_t> _cache;
 };
 
 theme_ptr parse_theme (bundles::item_ptr const& themeItem);

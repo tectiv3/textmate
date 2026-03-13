@@ -52,8 +52,6 @@ find_program(RAGEL_EXECUTABLE ragel REQUIRED)
 
 # Global include paths for PCH dependencies
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
-find_path(SPARSEHASH_INCLUDE_DIR sparsehash/dense_hash_map REQUIRED)
-include_directories(SYSTEM ${SPARSEHASH_INCLUDE_DIR})
 
 set(TEXTMATE_VERSION "2.0.23")
 
