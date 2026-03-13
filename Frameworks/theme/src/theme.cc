@@ -290,7 +290,7 @@ void theme_t::shared_styles_t::setup_styles ()
 
 	_gutter_styles.divider             = OakColorCreateCopySoften(_foreground, 0.4);
 	_gutter_styles.foreground          = OakColorCreateCopySoften(_foreground, 0.5);
-	_gutter_styles.background          = OakColorCreateCopySoften(_background, 0.87);
+	_gutter_styles.background          = OakColorCreateCopySoften(_background, 0.91);
 	_gutter_styles.selectionForeground = OakColorCreateCopySoften(_foreground, 0.95);
 	_gutter_styles.selectionBackground = OakColorCreateCopySoften(_background, 0.95);
 

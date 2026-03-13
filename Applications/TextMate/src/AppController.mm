@@ -16,6 +16,7 @@
 #import <OakAppKit/OakPasteboard.h>
 #import <OakFilterList/BundleItemChooser.h>
 #import <OakFoundation/OakFoundation.h>
+#import <OakSystem/application.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakTextView/OakDocumentView.h>
 #import <MenuBuilder/MenuBuilder.h>
@@ -29,7 +30,7 @@
 #import <bundles/query.h>
 #import <io/path.h>
 #import <regexp/glob.h>
-#import <network/tbz.h>
+#import "tbz.h"
 #import <ns/ns.h>
 #import <settings/settings.h>
 #import <oak/debug.h>
@@ -497,7 +498,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 	};
 
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
-	settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
+	settings_t::set_global_settings_path(oak::application_t::support("Global.tmProperties"));
 
 	[NSUserDefaults.standardUserDefaults registerDefaults:@{
 		@"NSRecentDocumentsLimit": @25,
@@ -507,7 +508,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	[TMPlugInController.sharedInstance loadAllPlugIns:nil];
 
-	std::string dest = path::join(path::home(), "Library/Application Support/TextMate/Managed");
+	std::string dest = oak::application_t::support("Managed");
 	if(!path::exists(dest))
 	{
 		if(NSString* archive = [[NSBundle mainBundle] pathForResource:@"DefaultBundles" ofType:@"tbz"])
@@ -587,8 +588,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 {
 	NSWindow.allowsAutomaticWindowTabbing = NO;
 
-	if([NSApp respondsToSelector:@selector(setAutomaticCustomizeTouchBarMenuItemEnabled)]) // MAC_OS_X_VERSION_10_12_1
-		NSApp.automaticCustomizeTouchBarMenuItemEnabled = YES;
+	NSApp.automaticCustomizeTouchBarMenuItemEnabled = YES;
 
 	if(!HasDocumentWindow([NSApp orderedWindows]))
 	{
@@ -635,7 +635,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 	// space. This is not what we want for auxillary windows like the Find dialog
 	// or HTML output, as these windows are tied to a document window.
 	//
-	// Starting with macOS 10.11 we have to change collection behavior after the
+	// Starting with macOS 14.0 (our minimum deployment target) we have to change collection behavior after the
 	// current event loop cycle, both when receiving the did become and did resign
 	// active notification.
 

@@ -88,12 +88,4 @@ ragel, boost, multimarkdown, mercurial (for tests), Cap'n Proto, LibreSSL, googl
 
 ## Upstream Status
 
-This fork (`tectiv3/textmate`) is based on `textmate/textmate` at commit `69b5af7`. Upstream has **992 additional commits** since the fork point, including:
-- Build system migration from `target` files to `.rave` files
-- GitHub Actions CI workflow
-- File browser refactoring (TMFileReference)
-- Dark mode improvements
-- Various bug fixes and code modernization
-- 840 files changed (~21.5k insertions, ~20.9k deletions)
-
-The fork has **no local divergence** from its own master — it is a clean snapshot of upstream at the fork point.
+This fork (`tectiv3/textmate`) is based on `textmate/textmate` at the latest upstream commit. Upstream is unmaintained. Active community fork: `tagliala/textmate`.

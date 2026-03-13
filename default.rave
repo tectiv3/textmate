@@ -1,4 +1,4 @@
-set APP_MIN_OS    "10.12"
+set APP_MIN_OS    "14.0"
 set CS_IDENTITY   "-"
 
 set C_FLAGS       "-std=c99"

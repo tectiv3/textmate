@@ -1,10 +1,8 @@
-#!/System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby
+#!/usr/bin/env ruby
 # == Synopsis
 #
 # Module to assist in building the Contributors page using git commit history.
 #
-$KCODE = 'U' if RUBY_VERSION < "1.9"
-
 require 'digest/md5'
 require 'fileutils'
 require 'net/https'
@@ -66,7 +64,7 @@ class GitHubLookup
     @db['71c216d75354dda636b879dfc95654fb'] = 'charliepark'
     @db['c8591aebaf7659f1ff429898345f446a'] = 'olegam'
     @db['f275727e33d63e05cc0abab1bfc41da7'] = 'sudara'
-    ObjectSpace.define_finalizer(@db, proc {|id| db.close })
+    ObjectSpace.define_finalizer(@db, proc {|id| @db.close })
   end
 
   def self.user_by_email(email)

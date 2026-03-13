@@ -2,6 +2,7 @@
 #import "plugin.h"
 #import <buffer/buffer.h>
 #import <bundles/bundles.h>
+#import <OakSystem/application.h>
 #import <file/bytes.h>
 #import <file/type.h>
 #import <file/reader.h>
@@ -27,7 +28,7 @@ static void initialize (CFBundleRef generatorBundle)
 		NSBundle* parentBundle = [NSBundle bundleWithPath:parentBundlePath];
 
 		settings_t::set_default_settings_path([[parentBundle pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
-		settings_t::set_global_settings_path(path::join(path::home(), "Library/Application Support/TextMate/Global.tmProperties"));
+		settings_t::set_global_settings_path(oak::application_t::support("Global.tmProperties"));
 
 		// Load bundle index
 		std::vector<std::string> paths;
@@ -209,11 +210,9 @@ OSStatus TextMateQuickLookPlugIn_GeneratePreviewForURL (void* instance, QLPrevie
 	NSUserDefaults* userDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.macromates.TextMate"];
 	NSString* appearance = [userDefaults stringForKey:@"themeAppearance"];
 	BOOL darkMode = [appearance isEqualToString:@"dark"];
-	if(@available(macos 10.14, *))
-	{
-		if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not ‘light’ then assume ‘auto’
-			darkMode = [[NSAppearance.currentAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
-	}
+	// Appearance detection is always available on macOS 14.0+
+	if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not 'light' then assume 'auto'
+		darkMode = [[NSAppearance.currentAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
 	NSString* themeUUID = [userDefaults stringForKey:darkMode ? @"darkModeThemeUUID" : @"universalThemeUUID"];
 
 	settings_t const settings = settings_for_path(URLtoString(url), fileType);
