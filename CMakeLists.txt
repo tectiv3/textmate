@@ -48,7 +48,6 @@ add_link_options(-fobjc-link-runtime -ObjC)
 
 # Dependencies
 find_package(Boost REQUIRED)
-find_package(CapnProto REQUIRED)
 find_program(RAGEL_EXECUTABLE ragel REQUIRED)
 
 # Global include paths for PCH dependencies
@@ -56,10 +55,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 find_path(SPARSEHASH_INCLUDE_DIR sparsehash/dense_hash_map REQUIRED)
 include_directories(SYSTEM ${SPARSEHASH_INCLUDE_DIR})
 
-# Version extraction (replaces rave `capture` command)
-file(STRINGS "${CMAKE_SOURCE_DIR}/Applications/TextMate/about/Changes.md"
-  _version_line REGEX "^## [0-9]" LIMIT_COUNT 1)
-string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" TEXTMATE_VERSION "${_version_line}")
+set(TEXTMATE_VERSION "2.0.23")
 
 # Shared includes
 include_directories(Shared/include)

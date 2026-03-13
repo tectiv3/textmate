@@ -330,7 +330,7 @@ static NSString* SafeBasename (NSString* name)
 	cache.cleanup(bundlesPaths);
 	if(cache.dirty())
 	{
-		cache.save_capnp(bundlesIndexPath);
+		cache.save(bundlesIndexPath);
 		cache.set_dirty(false);
 	}
 	_needsSaveBundlesIndex = NO;
@@ -517,21 +517,9 @@ namespace
 
 	for(auto path : bundles::locations())
 		bundlesPaths.push_back(path::join(path, "Bundles"));
-	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.binary");
+	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.plist");
 	cache.set_content_filter(&prune_dictionary);
-
-	// LEGACY bundle index used prior to 2.0-alpha.9467
-	std::string const oldPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.plist");
-	if(access(oldPath.c_str(), R_OK) == 0)
-	{
-		cache.load(oldPath);
-		cache.save_capnp(bundlesIndexPath);
-		unlink(oldPath.c_str());
-	}
-	else
-	{
-		cache.load_capnp(bundlesIndexPath);
-	}
+	cache.load(bundlesIndexPath);
 
 	_needsCreateBundlesIndex = YES;
 	[self createBundlesIndex:self];

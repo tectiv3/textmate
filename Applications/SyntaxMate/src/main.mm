@@ -17,7 +17,7 @@ int main (int argc, char const* argv[])
 	
 	// Keep parsed bundle in the local Caches folder
 	NSURL* cachesURL = [NSFileManager.defaultManager URLForDirectory:NSCachesDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:NULL];
-	std::string bundlesIndexCachePath([cachesURL URLByAppendingPathComponent:@"TextMateBundlesIndex.binary"].fileSystemRepresentation);
+	std::string bundlesIndexCachePath([cachesURL URLByAppendingPathComponent:@"TextMateBundlesIndex.plist"].fileSystemRepresentation);
 	
 	// Convert property lists into fast binaries
 	plist::cache_t cache;

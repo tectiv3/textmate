@@ -2,37 +2,47 @@
 
 ## Project Overview
 
-TextMate is a macOS-native text editor written in **Objective-C++**. Low-level data structures and algorithms are C++14; GUI code uses Objective-C++ with AppKit/Cocoa. Licensed under GPL v3.
+TextMate is a macOS-native text editor written in **Objective-C++**. Low-level data structures and algorithms are C++20; GUI code uses Objective-C++ with AppKit/Cocoa. Licensed under GPL v3. Minimum deployment target: macOS 14.0.
 
 ## Repository Structure
 
 ```
-Applications/   - 11 apps (TextMate, mate, commit, gtm, bl, indent, etc.)
+Applications/   - 10 apps (TextMate, mate, commit, gtm, indent, etc.)
 Frameworks/     - 45 self-contained frameworks (core logic + GUI)
-PlugIns/        - Plugin system (dialog, dialog-1.x)
+PlugIns/        - Plugin system (dialog, dialog-1.x) — incorporated into repo
 Shared/         - Shared PCH headers, oak utility includes
-vendor/         - External deps (Onigmo, kvdb, MASPreferences, MGScopeBar, XcodeEditor)
-bin/            - Build tools (gen_build, CxxTest)
+vendor/         - External deps (Onigmo, kvdb)
+bin/            - Build tools (gen_test, CxxTest) and release scripts
+cmake/          - CMake helper functions (TextMateHelpers.cmake)
 ```
 
 ## Build System
 
-- **Build tool:** Ninja (generated from `target` files by `bin/gen_build` Ruby script)
-- **Bootstrap:** `./configure && ninja`
-- **Build dir:** `~/build/TextMate` (override with `builddir` env var)
+- **Build tool:** CMake + Ninja
+- **Bundle ID:** `com.macromates.TextMate-dev` (coexists with production TextMate)
 
 ### Key Build Commands
 
 ```bash
-ninja TextMate           # Build main app
-ninja TextMate/run       # Build and run
-ninja <framework>/test   # Run tests for a framework (e.g., ninja io/test)
-ninja -t clean           # Clean everything
+make debug           # Incremental debug build (ASan enabled)
+make release         # Incremental release build (LTO, no ASan)
+make run             # Build debug and launch
+make clean           # Remove all build dirs
 ```
 
 ### Dependencies
 
-ragel, boost, multimarkdown, mercurial (for tests), Cap'n Proto, LibreSSL, google-sparsehash, ninja
+ragel, boost, google-sparsehash, ninja, cmake
+
+### Build Quirks
+
+- `-ObjC` linker flag required to load ObjC categories from static libraries
+- `network` framework include path is PRIVATE to avoid case-insensitive collision with Apple's Network.framework
+- `Frameworks/updater` and `Applications/bl` disabled (not needed, avoids network collision)
+- OakDebug linked unconditionally (symbols used in all build configs)
+- Plugin `.tmplugin` bundles need ad-hoc codesigning before embedding in app
+- gen_test runner inlines test source bodies — don't compile test files separately
+- Framework resources (icons, images, plists) must be added to TextMate app CMakeLists since static libs can't carry resources
 
 ## Architecture
 
@@ -67,7 +77,11 @@ ragel, boost, multimarkdown, mercurial (for tests), Cap'n Proto, LibreSSL, googl
 
 ### Entry Point
 
-`Applications/TextMate/src/main.mm` - Initializes curl, sets up app support dir, registers signal handlers, calls `NSApplicationMain()`.
+`Applications/TextMate/src/main.mm` - Sets app support dir via `oak::application_t::set_support()`, registers signal handlers, calls `NSApplicationMain()`.
+
+### App Support Path
+
+Use `oak::application_t::support("relative/path")` (from `<OakSystem/application.h>`) instead of hardcoding `~/Library/Application Support/TextMate/`. Set once in `main.mm`.
 
 ## Code Conventions
 
@@ -79,12 +93,13 @@ ragel, boost, multimarkdown, mercurial (for tests), Cap'n Proto, LibreSSL, googl
 - **Memory:** std::shared_ptr, ARC for Objective-C
 - **Header guards:** `#ifndef SOMETHING_H_RANDOMHASH`
 - **Commit messages:** Summary < 70 chars, blank line, then reasoning
+- **No `@available` checks** for APIs available since macOS 14 (our minimum target)
 
 ## Testing
 
 - **Framework:** CxxTest (at `bin/CxxTest`)
 - **Test files:** `Frameworks/<name>/tests/t_*.cc` or `t_*.mm`
-- **Run tests:** `ninja <framework>/test`
+- **Run tests:** `cd build-debug && ctest --output-on-failure`
 
 ## Upstream Status
 

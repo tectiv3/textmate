@@ -95,24 +95,11 @@ target_sources(TextMate PRIVATE ${_doctype_res})
 set_source_files_properties(${_doctype_res} PROPERTIES
   MACOSX_PACKAGE_LOCATION "Resources/DocumentTypes")
 
-# Markdown → HTML for About window (uses existing bin/gen_html Ruby script)
-file(GLOB _about_md about/*.md)
-foreach(_md ${_about_md})
-  get_filename_component(_name "${_md}" NAME_WE)
-  set(_html "${CMAKE_CURRENT_BINARY_DIR}/${_name}.html")
-  add_custom_command(
-    OUTPUT "${_html}"
-    COMMAND "${CMAKE_SOURCE_DIR}/bin/gen_html"
-      -h "${CMAKE_CURRENT_SOURCE_DIR}/templates/header.html"
-      -f "${CMAKE_CURRENT_SOURCE_DIR}/templates/footer.html"
-      "${_md}" > "${_html}"
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    DEPENDS "${_md}" "${CMAKE_SOURCE_DIR}/bin/gen_html"
-    COMMENT "gen_html: ${_name}.md")
-  target_sources(TextMate PRIVATE "${_html}")
-  set_source_files_properties("${_html}" PROPERTIES
-    MACOSX_PACKAGE_LOCATION "Resources/About")
-endforeach()
+# Pre-converted HTML for About window
+file(GLOB _about_html about/*.html)
+target_sources(TextMate PRIVATE ${_about_html})
+set_source_files_properties(${_about_html} PROPERTIES
+  MACOSX_PACKAGE_LOCATION "Resources/About")
 
 # Embedded CLI tools
 textmate_embed(TextMate mate "MacOS")
