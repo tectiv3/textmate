@@ -5,27 +5,6 @@
 // = Create Delta =
 // ================
 
-namespace
-{
-	struct test_equal_helper_t
-	{
-		test_equal_helper_t (plist::any_t const& rhs) : rhs(rhs) { }
-		plist::any_t const& rhs;
-
-		template <typename T>
-		bool operator() (T const& lhs) const
-		{
-			if(T const* value = ::plist::get<T>(&rhs))
-				return lhs == *value;
-			return false;
-		}
-	};
-}
-
-static bool equal (plist::any_t const& lhs, plist::any_t const& rhs)
-{
-	return std::visit(test_equal_helper_t(rhs), lhs.data);
-}
 
 static std::string encode_key (std::string const& key)
 {

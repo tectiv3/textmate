@@ -41,11 +41,11 @@ std::string OakStackDump (int linesToSkip)
 		int mib[2] = { CTL_USER, USER_CS_PATH };
 		size_t len = 0;
 		sysctl(mib, 2, NULL, &len, NULL, 0);
-		char buf[len + 5];
-		strcpy(buf, "PATH=");
-		sysctl(mib, 2, buf + 5, &len, NULL, 0);
+		std::vector<char> buf(len + 5);
+		strcpy(buf.data(), "PATH=");
+		sysctl(mib, 2, buf.data() + 5, &len, NULL, 0);
 
-		char const* envp[] = { "LANG=en_US.UTF-8", "LC_CTYPE=en_US.UTF-8", buf, NULL };
+		char const* envp[] = { "LANG=en_US.UTF-8", "LC_CTYPE=en_US.UTF-8", buf.data(), NULL };
 		execve(argv[0], (char* const*)argv, (char* const*)envp);
 		_exit(EXIT_FAILURE);
 	}

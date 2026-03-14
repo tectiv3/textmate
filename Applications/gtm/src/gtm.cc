@@ -134,6 +134,7 @@ int main (int argc, char* const* argv)
 	};
 
 	bool verbose = false, trim = false, loadIndex = false;
+	(void)trim;
 	std::string grammar = NULL_STR, delimiters = NULL_STR;
 
 	int ch;

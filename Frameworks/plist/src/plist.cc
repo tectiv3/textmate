@@ -62,9 +62,9 @@ namespace plist
 		std::map<std::string, any_t>& ref = ::plist::get< std::map<std::string, any_t> >(res = std::map<std::string, any_t>());
 
 		CFIndex len = CFDictionaryGetCount(dict);
-		CFPropertyListRef keys[len];
-		CFPropertyListRef values[len];
-		CFDictionaryGetKeysAndValues(dict, keys, values);
+		std::vector<CFPropertyListRef> keys(len);
+		std::vector<CFPropertyListRef> values(len);
+		CFDictionaryGetKeysAndValues(dict, keys.data(), values.data());
 		for(CFIndex i = 0; i < len; ++i)
 		{
 			std::map<std::string, any_t>::iterator it = ref.emplace(cf::to_s((CFStringRef)keys[i]), any_t()).first;

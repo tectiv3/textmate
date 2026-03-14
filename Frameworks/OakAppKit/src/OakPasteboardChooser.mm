@@ -445,7 +445,7 @@ static NSMutableDictionary* SharedChoosers;
 
 - (void)tableView:(NSTableView*)aTableView willDisplayCell:(id)aCell forTableColumn:(NSTableColumn*)aTableColumn row:(NSInteger)rowIndex
 {
-	if([aCell backgroundStyle] == NSBackgroundStyleDark && [aTableColumn.identifier isEqualToString:kTableColumnIdentifierMain])
+	if([aCell backgroundStyle] == NSBackgroundStyleEmphasized && [aTableColumn.identifier isEqualToString:kTableColumnIdentifierMain])
 	{
 		id obj = [aCell objectValue];
 		if([obj isKindOfClass:[NSAttributedString class]])

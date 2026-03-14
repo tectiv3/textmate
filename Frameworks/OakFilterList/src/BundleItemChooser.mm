@@ -384,7 +384,7 @@ static std::vector<bundles::item_ptr> relevant_items_in_scope (scope::context_t 
 - (void)setBackgroundStyle:(NSBackgroundStyle)backgroundStyle
 {
 	[super setBackgroundStyle:backgroundStyle];
-	if(backgroundStyle == NSBackgroundStyleDark)
+	if(backgroundStyle == NSBackgroundStyleEmphasized)
 	{
 		self.textField.objectValue        = [self selectedStringForString:[self valueForKeyPath:@"objectValue.name"]];
 		self.contextTextField.textColor   = [NSColor colorWithCalibratedWhite:0.9 alpha:1];

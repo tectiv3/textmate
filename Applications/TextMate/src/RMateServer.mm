@@ -361,7 +361,7 @@ namespace // wrap in anonymous namespace to avoid clashing with other callbacks 
 			++*counter;
 			__weak __block id token = [NSNotificationCenter.defaultCenter addObserverForName:OakDocumentWillCloseNotification object:document queue:nil usingBlock:^(NSNotification*){
 				if(--*counter == 0)
-					[terminal activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+					[terminal activateWithOptions:0];
 				[NSNotificationCenter.defaultCenter removeObserver:token];
 			}];
 		}
@@ -626,9 +626,9 @@ struct socket_observer_t
 
 static bool rmate_connection_handler_t (socket_t const& socket)
 {
-	socklen_t dummyLen = std::max(sizeof(sockaddr_un), sizeof(sockaddr_in));
-	char dummy[dummyLen];
-	int newFd = accept(socket, (sockaddr*)&dummy[0], &dummyLen);
+	union { sockaddr_un un; sockaddr_in in; } addr;
+	socklen_t addrLen = sizeof(addr);
+	int newFd = accept(socket, (sockaddr*)&addr, &addrLen);
 
 	std::string welcome = "220 " + sys_info(KERN_HOSTNAME) + " RMATE TextMate (" + sys_info(KERN_OSTYPE) + " " + sys_info(KERN_OSRELEASE) + ")\n";
 	ssize_t len = write(newFd, welcome.data(), welcome.size());

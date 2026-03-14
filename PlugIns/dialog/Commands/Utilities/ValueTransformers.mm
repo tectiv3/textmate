@@ -1,5 +1,6 @@
 #import "ValueTransformers.h"
 #import "../../Dialog2.h"
+#include <vector>
 
 // ===================================================
 // = Int Array To Index Path Array Value Transformer =
@@ -75,8 +76,8 @@
 - (id)reverseTransformedValue:(id)value
 {
 	NSMutableArray* array = [NSMutableArray array];
-	NSUInteger buf[([value count])];
-	[(NSIndexSet*)value getIndexes:buf maxCount:[value count] inIndexRange:nil];
+	std::vector<NSUInteger> buf([value count]);
+	[(NSIndexSet*)value getIndexes:buf.data() maxCount:[value count] inIndexRange:nil];
 	for(NSUInteger i = 0; i != [value count]; i++)
 		[array addObject:[NSNumber numberWithUnsignedInteger:buf[i]]];
 	return array;

@@ -429,8 +429,8 @@ namespace
 	return sharedInstances[aName];
 }
 
-+ (OakPasteboard*)generalPasteboard  { return [OakPasteboard pasteboardWithName:@"General" systemPasteboard:[NSPasteboard pasteboardWithName:NSGeneralPboard]  avoidsDuplicates:NO];  }
-+ (OakPasteboard*)findPasteboard     { return [OakPasteboard pasteboardWithName:@"Find"    systemPasteboard:[NSPasteboard pasteboardWithName:NSFindPboard]     avoidsDuplicates:YES]; }
++ (OakPasteboard*)generalPasteboard  { return [OakPasteboard pasteboardWithName:@"General" systemPasteboard:[NSPasteboard pasteboardWithName:NSPasteboardNameGeneral] avoidsDuplicates:NO];  }
++ (OakPasteboard*)findPasteboard     { return [OakPasteboard pasteboardWithName:@"Find"    systemPasteboard:[NSPasteboard pasteboardWithName:NSPasteboardNameFind]    avoidsDuplicates:YES]; }
 + (OakPasteboard*)replacePasteboard  { return [OakPasteboard pasteboardWithName:@"Replace" systemPasteboard:[NSPasteboard pasteboardWithName:OakReplacePboard] avoidsDuplicates:YES]; }
 
 - (instancetype)initWithName:(NSString*)aName systemPasteboard:(NSPasteboard*)pboard avoidsDuplicates:(BOOL)flag
@@ -453,7 +453,7 @@ namespace
 		if(NSNumber* historyId = options[@"historyId"])
 		{
 			char const* query = "SELECT id FROM history WHERE id = :history_id";
-			if(NSDictionary* row = RunSQLStatement(OakPasteboard.SQLDatabase, query, { { ":history_id", historyId } }).firstObject)
+			if(RunSQLStatement(OakPasteboard.SQLDatabase, query, { { ":history_id", historyId } }).firstObject)
 				return;
 		}
 	}

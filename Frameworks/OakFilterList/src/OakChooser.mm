@@ -66,7 +66,7 @@
 - (void)setBackgroundStyle:(NSBackgroundStyle)backgroundStyle
 {
 	[super setBackgroundStyle:backgroundStyle];
-	if(backgroundStyle == NSBackgroundStyleDark)
+	if(backgroundStyle == NSBackgroundStyleEmphasized)
 	{
 		self.textField.objectValue       = [self selectedStringForString:[self valueForKeyPath:@"objectValue.name"]];
 		self.folderTextField.textColor   = [NSColor colorWithCalibratedWhite:0.9 alpha:1];
