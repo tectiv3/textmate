@@ -755,6 +755,12 @@ static std::string shell_quote (std::vector<std::string> paths)
 }
 @end
 
+@interface OakTextView ()
+- (void)showLSPHoverTooltip:(OakTooltipContent*)content atRect:(NSRect)viewRect;
+- (OakTooltipContent*)createTooltipContentFromHover:(NSDictionary*)hover;
+- (NSAttributedString*)parseMarkdownToAttributedString:(NSString*)markdown;
+@end
+
 @implementation OakTextView
 // =================================
 // = OakTextView Delegate Wrappers =
@@ -5283,15 +5289,36 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	text::pos_t pos = documentView->convert(index.index);
 
-	// Check cache: keyed by "line:column"
-	NSString* cacheKey = [NSString stringWithFormat:@"%zu:%zu", pos.line, pos.column];
-	if(_lspHoverCache)
+	// Extract word at hover position for cache key
+	ng::range_t wordRange = ng::extend(*documentView, index, kSelectionExtendToWord).last();
+	std::string word = documentView->substr(wordRange.min().index, wordRange.max().index);
+	NSString* cacheKey = to_ns(word);
+
+	// Check cache: keyed by word, with 60s TTL
+	if(_lspHoverCache && cacheKey.length > 0)
 	{
-		NSDictionary* cached = _lspHoverCache[cacheKey];
-		if(cached)
+		NSDictionary* cachedEntry = _lspHoverCache[cacheKey];
+		if(cachedEntry)
 		{
-			[self showLSPHoverTooltipWithContent:cached atIndex:index];
-			return;
+			NSDate* cachedAt = cachedEntry[@"_cachedAt"];
+			if(cachedAt && -[cachedAt timeIntervalSinceNow] < 60.0)
+			{
+				OakTooltipContent* content = cachedEntry[@"content"];
+				if(content && ![content isEqual:[NSNull null]])
+				{
+					// Use word range rect for better popover positioning
+					ng::range_t wordRange = ng::extend(*documentView, index, kSelectionExtendToWord).last();
+					CGRect wordRect = documentView->rect_for_range(wordRange.min().index, wordRange.max().index);
+					NSRect viewRect = NSRectFromCGRect(wordRect);
+					
+					[self showLSPHoverTooltip:content atRect:viewRect];
+					return;
+				}
+			}
+			else
+			{
+				[_lspHoverCache removeObjectForKey:cacheKey];
+			}
 		}
 	}
 
@@ -5308,13 +5335,143 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 			strongSelf->_lspHoverRequestId = 0;
 
-			// Cache the result
-			if(!strongSelf->_lspHoverCache)
-				strongSelf->_lspHoverCache = [NSMutableDictionary new];
-			strongSelf->_lspHoverCache[cacheKey] = hover;
+			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+				// Generate content (expensive parsing, now on background thread)
+				OakTooltipContent* content = [strongSelf createTooltipContentFromHover:hover];
 
-			[strongSelf showLSPHoverTooltipWithContent:hover atIndex:index];
+				dispatch_async(dispatch_get_main_queue(), ^{
+					// Check if we are still looking at the same document/context
+					if(!strongSelf || !strongSelf->documentView)
+						return;
+
+					// Cache the result keyed by word
+					if(!strongSelf->_lspHoverCache)
+						strongSelf->_lspHoverCache = [NSMutableDictionary new];
+					if(cacheKey.length > 0)
+					{
+						strongSelf->_lspHoverCache[cacheKey] = @{
+							@"content": content ?: [NSNull null],
+							@"_cachedAt": [NSDate date]
+						};
+					}
+
+					if(content)
+					{
+						// Show tooltip
+						ng::range_t wordRange = ng::extend(*strongSelf->documentView, index, kSelectionExtendToWord).last();
+						CGRect wordRect = strongSelf->documentView->rect_for_range(wordRange.min().index, wordRange.max().index);
+						NSRect viewRect = NSRectFromCGRect(wordRect);
+						[strongSelf showLSPHoverTooltip:content atRect:viewRect];
+					}
+				});
+			});
 		}];
+}
+
+- (OakTooltipContent*)createTooltipContentFromHover:(NSDictionary*)hover
+{
+	NSString* value = hover[@"value"];
+	if(!value.length)
+		return nil;
+
+	// Truncate huge content to avoid main thread freeze during rendering
+	// 1000 characters is plenty for a tooltip
+	if(value.length > 1000)
+	{
+		value = [[value substringToIndex:1000] stringByAppendingString:@"\n... (truncated)"];
+	}
+
+	// Parse hover content — extract title (signature) and body (docs)
+	NSString* kind = hover[@"kind"];
+	NSString* language = hover[@"language"];
+	BOOL isMarkdown = [kind isEqualToString:@"markdown"];
+
+	NSString* title = nil;
+	NSAttributedString* body = [[NSAttributedString alloc] initWithString:@""];
+
+	if(isMarkdown)
+	{
+		// Extract code blocks from markdown (```lang\n...\n```)
+		static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
+		NSArray* codeMatches = [codeBlockRegex matchesInString:value options:0 range:NSMakeRange(0, value.length)];
+
+		NSString* bodyText = value;
+		if(codeMatches.count > 0)
+		{
+			NSTextCheckingResult* firstMatch = codeMatches[0];
+			title = [value substringWithRange:[firstMatch rangeAtIndex:1]];
+
+			// Strip PHP opening tag
+			title = [title stringByReplacingOccurrencesOfString:@"<?php\n" withString:@""];
+			title = [title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+			// Body is everything outside the first code block
+			NSMutableString* remaining = [value mutableCopy];
+			[remaining replaceCharactersInRange:[firstMatch rangeAtIndex:0] withString:@""];
+			bodyText = [remaining stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+			// Clean up markdown separators
+			bodyText = [bodyText stringByReplacingOccurrencesOfString:@"---" withString:@""];
+			bodyText = [bodyText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+		}
+
+		if(bodyText.length > 0)
+			body = [self parseMarkdownToAttributedString:bodyText];
+	}
+	else if(language)
+	{
+		// MarkedString with language — treat value as code signature
+		title = value;
+	}
+	else if(value.length > 0)
+	{
+		body = [[NSAttributedString alloc]
+			initWithString:value
+				attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:11]}];
+	}
+
+	return [[OakTooltipContent alloc]
+		initWithTitle:title
+				 body:body
+		  codeSnippet:nil
+			 language:language];
+}
+
+- (void)showLSPHoverTooltip:(OakTooltipContent*)content atRect:(NSRect)viewRect
+{
+	if(!content)
+		return;
+
+	if(!_lspTheme)
+	{
+		_lspTheme = [[OakThemeEnvironment alloc] init];
+		// TODO: apply actual theme colors
+		[_lspTheme applyTheme:@{
+			@"fontName": @"Menlo",
+			@"fontSize": @(12),
+		}];
+	}
+
+	if(!_lspHoverTooltip)
+	{
+		_lspHoverTooltip = [[OakInfoTooltip alloc] initWithTheme:_lspTheme];
+		_lspHoverTooltip.delegate = (id<OakInfoTooltipDelegate>)self;
+	}
+
+	[_lspHoverTooltip showIn:self at:viewRect content:content];
+}
+
+- (void)showLSPHoverTooltipWithContent:(NSDictionary*)hover atIndex:(ng::index_t)index
+{
+	// Deprecated, implementation moved to createTooltipContentFromHover / showLSPHoverTooltip
+	// Keeping method signature if needed by legacy calls, but forwarding to new logic
+	OakTooltipContent* content = [self createTooltipContentFromHover:hover];
+	
+	ng::range_t wordRange = ng::extend(*documentView, index, kSelectionExtendToWord).last();
+	CGRect wordRect = documentView->rect_for_range(wordRange.min().index, wordRange.max().index);
+	NSRect viewRect = NSRectFromCGRect(wordRect);
+	
+	[self showLSPHoverTooltip:content atRect:viewRect];
 }
 
 - (NSAttributedString*)parseMarkdownToAttributedString:(NSString*)markdown
@@ -5361,6 +5518,13 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 		[result appendAttributedString:lineResult];
 	}
+
+	// Trim leading/trailing whitespace from the result
+	NSCharacterSet* ws = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+	while(result.length > 0 && [ws characterIsMember:[result.string characterAtIndex:0]])
+		[result deleteCharactersInRange:NSMakeRange(0, 1)];
+	while(result.length > 0 && [ws characterIsMember:[result.string characterAtIndex:result.length - 1]])
+		[result deleteCharactersInRange:NSMakeRange(result.length - 1, 1)];
 
 	return result;
 }
@@ -5443,92 +5607,7 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	return result;
 }
 
-- (void)showLSPHoverTooltipWithContent:(NSDictionary*)hover atIndex:(ng::index_t)index
-{
-	if(!documentView)
-		return;
 
-	NSString* value = hover[@"value"];
-	if(!value.length)
-		return;
-
-	if(!_lspTheme)
-	{
-		_lspTheme = [[OakThemeEnvironment alloc] init];
-		// TODO: apply actual theme colors
-		[_lspTheme applyTheme:@{
-			@"fontName": @"Menlo",
-			@"fontSize": @(12),
-		}];
-	}
-
-	if(!_lspHoverTooltip)
-	{
-		_lspHoverTooltip = [[OakInfoTooltip alloc] initWithTheme:_lspTheme];
-		_lspHoverTooltip.delegate = (id<OakInfoTooltipDelegate>)self;
-	}
-
-	// Parse hover content — extract title (signature) and body (docs)
-	NSString* kind = hover[@"kind"];
-	NSString* language = hover[@"language"];
-	BOOL isMarkdown = [kind isEqualToString:@"markdown"];
-
-	NSString* title = nil;
-	NSAttributedString* body = [[NSAttributedString alloc] initWithString:@""];
-
-	if(isMarkdown)
-	{
-		// Extract code blocks from markdown (```lang\n...\n```)
-		static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
-		NSArray* codeMatches = [codeBlockRegex matchesInString:value options:0 range:NSMakeRange(0, value.length)];
-
-		NSString* bodyText = value;
-		if(codeMatches.count > 0)
-		{
-			NSTextCheckingResult* firstMatch = codeMatches[0];
-			title = [value substringWithRange:[firstMatch rangeAtIndex:1]];
-
-			// Strip PHP opening tag
-			title = [title stringByReplacingOccurrencesOfString:@"<?php\n" withString:@""];
-			title = [title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-			// Body is everything outside the first code block
-			NSMutableString* remaining = [value mutableCopy];
-			[remaining replaceCharactersInRange:[firstMatch rangeAtIndex:0] withString:@""];
-			bodyText = [remaining stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-			// Clean up markdown separators
-			bodyText = [bodyText stringByReplacingOccurrencesOfString:@"---" withString:@""];
-			bodyText = [bodyText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-		}
-
-		if(bodyText.length > 0)
-			body = [self parseMarkdownToAttributedString:bodyText];
-	}
-	else if(language)
-	{
-		// MarkedString with language — treat value as code signature
-		title = value;
-	}
-	else if(value.length > 0)
-	{
-		body = [[NSAttributedString alloc]
-			initWithString:value
-				attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:11]}];
-	}
-
-	OakTooltipContent* content = [[OakTooltipContent alloc]
-		initWithTitle:title
-				 body:body
-		  codeSnippet:nil
-			 language:language];
-
-	// Use word range rect for better popover positioning
-	ng::range_t wordRange = ng::extend(*documentView, index, kSelectionExtendToWord).last();
-	CGRect wordRect = documentView->rect_for_range(wordRange.min().index, wordRange.max().index);
-	NSRect viewRect = NSRectFromCGRect(wordRect);
-	[_lspHoverTooltip showIn:self at:viewRect content:content];
-}
 
 - (void)cancelLSPHoverRequest
 {

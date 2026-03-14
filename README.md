@@ -101,17 +101,20 @@ brew install llvm
 lspCommand = "/opt/homebrew/opt/llvm/bin/clangd"
 ```
 
-### Vue/TypeScript (volar)
+### Vue/TypeScript (Volar 2.x)
+
+Volar 2.0+ uses Hybrid Mode, requiring `typescript-language-server` for script support. Install locally:
 
 ```sh
-npm install -g @vue/language-server
+npm install -D typescript typescript-language-server @vue/language-server @vue/typescript-plugin
 ```
 
-```
+```properties
 # .tm_properties
 [ *.{vue,ts,tsx,js,jsx} ]
-lspCommand = "/opt/homebrew/bin/vue-language-server" --stdio
-lspInitOptions = {"typescript":{"tsdk":"node_modules/typescript/lib"}}
+lspCommand = "$TM_PROJECT_DIRECTORY/node_modules/.bin/typescript-language-server --stdio"
+# Point to the plugin location inside node_modules (relative to project root)
+lspInitOptions = '{ "plugins": [{ "name": "@vue/typescript-plugin", "location": "./node_modules/@vue/language-server", "languages": ["vue"] }] }'
 ```
 
 ### Settings
