@@ -229,4 +229,9 @@ namespace ng
 		}
 	}
 
+	void editor_t::set_lsp_completions (std::vector<std::string> const& completions)
+	{
+		_completion_info.set_suggestions(completions);
+	}
+
 } /* ng */

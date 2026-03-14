@@ -408,7 +408,7 @@ struct document_view_t : ng::buffer_api_t
 	void set_ranges (ng::ranges_t const& r) { _editor->set_selections(r); }
 	bool has_selection () const { return _editor->has_selection(); }
 	bool handle_result (std::string const& out, output::type placement, output_format::type format, output_caret::type outputCaret, ng::ranges_t const& inputRanges, std::map<std::string, std::string> environment) { return _editor->handle_result(out, placement, format, outputCaret, inputRanges, environment); }
-
+	void set_lsp_completions (std::vector<std::string> const& completions) { _editor->set_lsp_completions(completions); }
 
 	// ==========
 	// = Layout =
@@ -515,8 +515,6 @@ private:
 	// ==================
 
 	NSArray<NSDictionary*>* _lspSuggestions;
-	size_t _lspReplacementFrom;
-	size_t _lspReplacementTo;
 
 	// =================
 	// = Accessibility =
@@ -930,6 +928,11 @@ static std::string shell_quote (std::vector<std::string> paths)
 			std::map<std::string, std::string> variables_for_bundle_item (bundles::item_ptr item)
 			{
 				return [_self variablesForBundleItem:item];
+			}
+
+			void request_lsp_completions (size_t index, std::string const& prefix)
+			{
+				// LSP completions now handled by lspComplete: action (Opt+Tab)
 			}
 
 			OakTextView* _self;
@@ -4522,9 +4525,7 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 			NSLog(@"[LSP] Got %lu completions for prefix '%@', showing menu", (unsigned long)suggestions.count, prefix);
 
-			strongSelf->_lspSuggestions    = suggestions;
-			strongSelf->_lspReplacementFrom = caret - prefix.length;
-			strongSelf->_lspReplacementTo   = caret;
+			strongSelf->_lspSuggestions = suggestions;
 			[strongSelf performSelector:@selector(showLSPCompletionMenu) withObject:nil afterDelay:0];
 		}];
 }
@@ -4561,8 +4562,19 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	AUTO_REFRESH;
 
-	// Use the replacement range captured at request time
-	documentView->set_ranges(ng::range_t(_lspReplacementFrom, _lspReplacementTo));
+	// Delete the prefix that was already typed, then insert the completion
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+	size_t bol = documentView->begin(pos.line);
+	std::string lineText = documentView->substr(bol, caret);
+	size_t prefixStart = lineText.size();
+	while(prefixStart > 0 && (isalnum(lineText[prefixStart-1]) || lineText[prefixStart-1] == '_'))
+		--prefixStart;
+	size_t prefixLen = lineText.size() - prefixStart;
+
+	// Select the prefix range and replace with completion
+	size_t from = caret - prefixLen;
+	documentView->set_ranges(ng::range_t(from, caret));
 	documentView->insert(to_s(insertText));
 }
 
