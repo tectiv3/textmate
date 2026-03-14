@@ -46,11 +46,7 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE
 # ObjC runtime linking + force-load ObjC categories from static libraries
 add_link_options(-fobjc-link-runtime -ObjC)
 
-# Dependencies
-find_package(Boost REQUIRED)
-
-# Global include paths for PCH dependencies
-include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+# Dependencies — none required (all external deps removed)
 
 set(TEXTMATE_VERSION "2.0.23")
 

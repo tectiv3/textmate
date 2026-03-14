@@ -11,7 +11,7 @@
 #include <text/format.h>
 #include <cf/cf.h>
 
-struct expand_visitor : boost::static_visitor<void>
+struct expand_visitor
 {
 	std::function<std::optional<std::string>(std::string const&)> variable;
 	snippet::run_command_callback_t* callback;
@@ -31,7 +31,7 @@ struct expand_visitor : boost::static_visitor<void>
 	void traverse (parser::nodes_t const& nodes)
 	{
 		for(auto const& it : nodes)
-			boost::apply_visitor(*this, it);
+			std::visit(*this, it.data);
 	}
 
 	void handle_case_changes ()

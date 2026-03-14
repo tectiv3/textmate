@@ -182,7 +182,7 @@ static bool parse_array (char const*& p, char const* pe, plist::any_t& res)
 		return backtrack(p, bt, res);
 
 	plist::any_t element;
-	std::vector<plist::any_t>& ref = boost::get< std::vector<plist::any_t> >(res = std::vector<plist::any_t>());
+	std::vector<plist::any_t>& ref = plist::get< std::vector<plist::any_t> >(res = std::vector<plist::any_t>());
 	while(parse_element(p, pe, element))
 	{
 		ref.push_back(element);
@@ -197,8 +197,8 @@ static bool parse_key (char const*& p, char const* pe, plist::any_t& res)
 	plist::any_t tmp;
 	if(!parse_element(p, pe, tmp))
 		return false;
-	res = plist::get<std::string>(tmp);
-	return !boost::get<std::string>(res).empty();
+	res = plist::convert<std::string>(tmp);
+	return !plist::get<std::string>(res).empty();
 }
 
 static bool parse_dict (char const*& p, char const* pe, plist::any_t& res)
@@ -209,9 +209,9 @@ static bool parse_dict (char const*& p, char const* pe, plist::any_t& res)
 		return backtrack(p, bt, res);
 
 	plist::any_t key, value;
-	std::map<std::string, plist::any_t>& ref = boost::get< std::map<std::string, plist::any_t> >(res = std::map<std::string, plist::any_t>());
+	std::map<std::string, plist::any_t>& ref = plist::get< std::map<std::string, plist::any_t> >(res = std::map<std::string, plist::any_t>());
 	for(char const* lp = p; parse_key(lp, pe, key) && parse_char(lp, pe, '=') && parse_element(lp, pe, value) && parse_char(lp, pe, ';'); p = lp)
-		ref.emplace(boost::get<std::string>(key), value);
+		ref.emplace(plist::get<std::string>(key), value);
 
 	return parse_char(p, pe, '}') || backtrack(p, bt, res);
 }

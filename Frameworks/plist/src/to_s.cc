@@ -6,7 +6,7 @@
 
 namespace
 {
-	struct is_composite : boost::static_visitor<bool>
+	struct is_composite
 	{
 		bool operator() (bool flag) const                       { return false; }
 		bool operator() (int32_t i) const                       { return false; }
@@ -18,7 +18,7 @@ namespace
 		bool operator() (plist::dictionary_t const& dict) const { return true;  }
 	};
 
-	struct fits_single_line : boost::static_visitor<bool>
+	struct fits_single_line
 	{
 		bool operator() (bool flag) const                     { return true; }
 		bool operator() (int32_t i) const                     { return true; }
@@ -33,8 +33,8 @@ namespace
 			bool compositeItems = false;
 			for(auto const& it : array)
 			{
-				singleLineItems = singleLineItems && boost::apply_visitor(*this, it);
-				compositeItems = compositeItems || boost::apply_visitor(is_composite(), it);
+				singleLineItems = singleLineItems && std::visit(*this, it.data);
+				compositeItems = compositeItems || std::visit(is_composite(), it.data);
 			}
 			return singleLineItems && (array.size() <= 1 || !compositeItems);
 		}
@@ -43,7 +43,7 @@ namespace
 		{
 			bool res = dict.size() <= 1;
 			for(auto const& it : dict)
-				res = res && boost::apply_visitor(*this, it.second);
+				res = res && std::visit(*this, it.second.data);
 			return res;
 		}
 	};
@@ -180,7 +180,7 @@ namespace
 		std::map<std::string, size_t> _key_ranks;
 	};
 
-	struct pretty : boost::static_visitor<std::string>
+	struct pretty
 	{
 		pretty (int flags, key_less_than_t const& keyCompare, size_t indent = 0, bool is_key = false) : flags(flags), key_compare(keyCompare), indent(indent), is_key(is_key) { }
 
@@ -220,7 +220,7 @@ namespace
 						wrap = res.size();
 					}
 
-					res += boost::apply_visitor(pretty(flags | plist::kSingleLine, key_compare), it);
+					res += std::visit(pretty(flags | plist::kSingleLine, key_compare), it.data);
 				}
 
 				res = " " + res + " ";
@@ -238,7 +238,7 @@ namespace
 					if(!res.empty())
 						res += "\n";
 					res += indent_string() + '\t';
-					res += boost::apply_visitor(pretty(flags, key_compare, indent+1), it);
+					res += std::visit(pretty(flags, key_compare, indent+1), it.data);
 					res += ",";
 				}
 				res = "\n" + res + "\n" + indent_string();
@@ -262,7 +262,7 @@ namespace
 				for(auto const& it : dict)
 				{
 					std::string const& key = pretty_key(it.first, flags | plist::kSingleLine);
-					std::string const& value = boost::apply_visitor(pretty(flags | plist::kSingleLine, key_compare), it.second);
+					std::string const& value = std::visit(pretty(flags | plist::kSingleLine, key_compare), it.second.data);
 					res += text::format("%s = %s; ", key.c_str(), value.c_str());
 				}
 			}
@@ -276,7 +276,7 @@ namespace
 					if(!res.empty())
 						res += indent_string();
 					std::string const& key = pretty_key(it.first, flags);
-					std::string const& value = boost::apply_visitor(pretty(flags, key_compare, indent+1, true), it.second);
+					std::string const& value = std::visit(pretty(flags, key_compare, indent+1, true), it.second.data);
 					res += text::format("\t%s = %s;\n", key.c_str(), value.c_str());
 				}
 				res = (is_key ? "\n" + indent_string() : "") + res + indent_string();
@@ -286,11 +286,10 @@ namespace
 	};
 }
 
-namespace boost
+namespace plist
 {
-	std::string to_s (plist::any_t const& plist, int flags, std::vector<std::string> const& keySortOrder)
+	std::string to_s (any_t const& plist, int flags, std::vector<std::string> const& keySortOrder)
 	{
-		return boost::apply_visitor(pretty(flags, key_less_than_t(keySortOrder)), plist);
+		return std::visit(pretty(flags, key_less_than_t(keySortOrder)), plist.data);
 	}
-
-} /* boost */
+}

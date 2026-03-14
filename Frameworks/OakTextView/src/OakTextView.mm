@@ -1985,7 +1985,7 @@ static std::set<std::string> LocalBindings;
 
 static plist::any_t normalize_potential_dictionary (plist::any_t const& action)
 {
-	if(plist::dictionary_t const* dict = boost::get<plist::dictionary_t>(&action))
+	if(plist::dictionary_t const* dict = plist::get<plist::dictionary_t>(&action))
 	{
 		plist::dictionary_t res;
 		for(auto const& pair : *dict)
@@ -2025,7 +2025,7 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 		{
 			for(auto const& pair : plist::load(info.path))
 			{
-				if(info.local || boost::get<plist::dictionary_t>(&pair.second))
+				if(info.local || plist::get<plist::dictionary_t>(&pair.second))
 					LocalBindings.insert(ns::normalize_event_string(pair.first));
 				KeyBindings.emplace(ns::normalize_event_string(pair.first), normalize_potential_dictionary(pair.second));
 			}
@@ -2034,7 +2034,7 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 		std::multimap<std::string, std::string> actionToKey;
 		for(auto const& pair : KeyBindings)
 		{
-			if(std::string const* selector = boost::get<std::string>(&pair.second))
+			if(std::string const* selector = plist::get<std::string>(&pair.second))
 				actionToKey.emplace(*selector, pair.first);
 		}
 
@@ -2092,16 +2092,16 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 - (void)handleKeyBindingAction:(plist::any_t const&)anAction
 {
 	AUTO_REFRESH;
-	if(std::string const* selector = boost::get<std::string>(&anAction))
+	if(std::string const* selector = plist::get<std::string>(&anAction))
 	{
 		[self doCommandBySelector:NSSelectorFromString([NSString stringWithCxxString:*selector])];
 	}
-	else if(plist::array_t const* actions = boost::get<plist::array_t>(&anAction))
+	else if(plist::array_t const* actions = plist::get<plist::array_t>(&anAction))
 	{
 		std::vector<std::string> selectors;
 		for(auto const& it : *actions)
 		{
-			if(std::string const* selector = boost::get<std::string>(&it))
+			if(std::string const* selector = plist::get<std::string>(&it))
 				selectors.push_back(*selector);
 		}
 
@@ -2112,7 +2112,7 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 			else	[self doCommandBySelector:NSSelectorFromString([NSString stringWithCxxString:selectors[i]])];
 		}
 	}
-	else if(plist::dictionary_t const* nested = boost::get<plist::dictionary_t>(&anAction))
+	else if(plist::dictionary_t const* nested = plist::get<plist::dictionary_t>(&anAction))
 	{
 		__block id eventMonitor;
 		eventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent*(NSEvent* event){
@@ -3211,7 +3211,7 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 {
 	plist::any_t indentCorrections = bundles::value_for_setting("disableIndentCorrections", [self scopeContext]);
 
-	if(std::string const* str = boost::get<std::string>(&indentCorrections))
+	if(std::string const* str = plist::get<std::string>(&indentCorrections))
 	{
 		if(*str == "emptyLines")
 			return ng::kIndentCorrectNonEmptyLines;

@@ -255,7 +255,7 @@ void theme_t::shared_styles_t::setup_styles ()
 		{
 			for(auto const& it : items)
 			{
-				if(plist::dictionary_t const* styles = boost::get<plist::dictionary_t>(&it))
+				if(plist::dictionary_t const* styles = plist::get<plist::dictionary_t>(&it))
 				{
 					_styles.push_back(parse_styles(*styles));
 					if(!_styles.back().invisibles.is_blank())

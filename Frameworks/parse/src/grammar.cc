@@ -53,7 +53,7 @@ namespace parse
 			.map("injections",          &rule_t::injection_rules,      &convert_dictionary)
 		;
 
-		if(plist::dictionary_t const* plist = boost::get<plist::dictionary_t>(&any))
+		if(plist::dictionary_t const* plist = plist::get<plist::dictionary_t>(&any))
 		{
 			if(!plist->empty() && (plist->find("disabled") == plist->end() || !plist::get<int32_t>(plist->find("disabled")->second)))
 			{

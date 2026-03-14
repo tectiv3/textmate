@@ -112,7 +112,7 @@ static plist::array_t unwrap_array (NSArray* array, NSString* key)
 
 namespace
 {
-	struct expand_visitor_t : boost::static_visitor<void>
+	struct expand_visitor_t
 	{
 		expand_visitor_t (std::map<std::string, std::string> const& variables) : _variables(variables) { }
 
@@ -122,8 +122,8 @@ namespace
 		void operator() (oak::date_t const& value) const       { }
 		void operator() (std::vector<char> const& value) const { }
 		void operator() (std::string& str) const               { str = format_string::expand(str, _variables); }
-		void operator() (plist::array_t& array) const          { for(auto& item : array) boost::apply_visitor(*this, item); }
-		void operator() (plist::dictionary_t& dict) const      { for(auto& pair : dict)  boost::apply_visitor(*this, pair.second); }
+		void operator() (plist::array_t& array) const          { for(auto& item : array) std::visit(*this, item.data); }
+		void operator() (plist::dictionary_t& dict) const      { for(auto& pair : dict)  std::visit(*this, pair.second.data); }
 
 	private:
 		std::map<std::string, std::string> const& _variables;
@@ -525,7 +525,7 @@ static be::entry_ptr parent_for_column (NSBrowser* aBrowser, NSInteger aColumn, 
 
 	if(info.plist_key == NULL_STR)
 	{
-		if(plist::dictionary_t const* plistSubset = boost::get<plist::dictionary_t>(&parsedContent))
+		if(plist::dictionary_t const* plistSubset = plist::get<plist::dictionary_t>(&parsedContent))
 		{
 			std::vector<std::string> keys;
 			if(info.kind == bundles::kItemTypeGrammar)

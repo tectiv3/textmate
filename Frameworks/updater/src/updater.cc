@@ -16,7 +16,7 @@ namespace plist
 {
 	static plist::array_t const& as_array (plist::any_t const& any)
 	{
-		if(plist::array_t const* array = boost::get<plist::array_t>(&any))
+		if(plist::array_t const* array = ::plist::get<plist::array_t>(&any))
 			return *array;
 		static plist::array_t const* dummy = new plist::array_t;
 		return *dummy;
@@ -195,7 +195,7 @@ namespace bundles_db
 			{
 				for(auto const& type : fileTypes)
 				{
-					if(std::string const* ext = boost::get<std::string>(&type))
+					if(std::string const* ext = plist::get<std::string>(&type))
 						info->_file_types.push_back(*ext);
 				}
 			}
@@ -426,7 +426,7 @@ namespace bundles_db
 			plist::dictionary_t::iterator array = plist.find("bundles");
 			if(array == plist.end())
 				array = plist.emplace("bundles", plist::array_t()).first;
-			boost::get<plist::array_t>(array->second).push_back(dict);
+			plist::get<plist::array_t>(array->second).push_back(dict);
 		}
 		return plist::save(local_index_path(installDir), plist);
 	}

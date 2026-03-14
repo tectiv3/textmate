@@ -2,7 +2,7 @@
 
 namespace
 {
-	struct create_cf_property_list : boost::static_visitor<CFPropertyListRef>
+	struct create_cf_property_list
 	{
 		CFPropertyListRef operator() (bool flag) const                     { return CFRetain(flag ? kCFBooleanTrue : kCFBooleanFalse); }
 		CFPropertyListRef operator() (int32_t i) const                     { return CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &i); }
@@ -16,7 +16,7 @@ namespace
 			CFMutableArrayRef res = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
 			for(auto const& it : array)
 			{
-				CFPropertyListRef value = boost::apply_visitor(*this, it);
+				CFPropertyListRef value = std::visit(*this, it.data);
 				CFArrayAppendValue(res, value);
 				CFRelease(value);
 			}
@@ -29,7 +29,7 @@ namespace
 			for(auto const& it : dict)
 			{
 				CFPropertyListRef key = (*this)(it.first);
-				CFPropertyListRef value = boost::apply_visitor(*this, it.second);
+				CFPropertyListRef value = std::visit(*this, it.second.data);
 				CFDictionarySetValue(res, key, value);
 				CFRelease(key);
 				CFRelease(value);

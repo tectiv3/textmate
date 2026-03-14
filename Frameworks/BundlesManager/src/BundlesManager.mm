@@ -430,7 +430,7 @@ namespace
 
 			if(pair.first == bundles::kFieldSettingName)
 			{
-				if(plist::dictionary_t const* dictionary = boost::get<plist::dictionary_t>(&pair.second))
+				if(plist::dictionary_t const* dictionary = plist::get<plist::dictionary_t>(&pair.second))
 				{
 					plist::array_t settings;
 					for(auto const& settingsPair : *dictionary)
@@ -440,7 +440,7 @@ namespace
 			}
 			else if(pair.first == kFieldChangedItems)
 			{
-				if(plist::dictionary_t const* dictionary = boost::get<plist::dictionary_t>(&pair.second))
+				if(plist::dictionary_t const* dictionary = plist::get<plist::dictionary_t>(&pair.second))
 					res.emplace(pair.first, prune_dictionary(*dictionary));
 			}
 			else

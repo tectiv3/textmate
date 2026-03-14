@@ -119,7 +119,7 @@ namespace plist
 				NSMutableDictionary* content = [NSMutableDictionary dictionary];
 				for(auto const& kv : e.content())
 				{
-					if(std::string const* str = boost::get<std::string>(&kv.second))
+					if(std::string const* str = ::plist::get<std::string>(&kv.second))
 					{
 						content[@(kv.first.c_str())] = @(str->c_str());
 					}

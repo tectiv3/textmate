@@ -884,7 +884,7 @@ static std::vector<bundles::item_ptr> relevant_items_in_scope (scope::context_t 
 				{
 					std::string key = ns::normalize_event_string(pair.first);
 					std::string name, action;
-					if(std::string const* sel = boost::get<std::string>(&pair.second))
+					if(std::string const* sel = plist::get<std::string>(&pair.second))
 					{
 						if(*sel == "noop:" || !seen.emplace(key, *sel).second)
 							continue;

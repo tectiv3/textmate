@@ -7,7 +7,7 @@
 
 namespace
 {
-	struct test_equal_helper_t : boost::static_visitor<bool>
+	struct test_equal_helper_t
 	{
 		test_equal_helper_t (plist::any_t const& rhs) : rhs(rhs) { }
 		plist::any_t const& rhs;
@@ -15,7 +15,7 @@ namespace
 		template <typename T>
 		bool operator() (T const& lhs) const
 		{
-			if(T const* value = boost::get<T>(&rhs))
+			if(T const* value = ::plist::get<T>(&rhs))
 				return lhs == *value;
 			return false;
 		}
@@ -24,7 +24,7 @@ namespace
 
 static bool equal (plist::any_t const& lhs, plist::any_t const& rhs)
 {
-	return boost::apply_visitor(test_equal_helper_t(rhs), lhs);
+	return std::visit(test_equal_helper_t(rhs), lhs.data);
 }
 
 static std::string encode_key (std::string const& key)
@@ -61,11 +61,11 @@ static void delta_plist_helper (plist::dictionary_t const& oldDict, plist::dicti
 		newPath.push_back(newValue.first);
 
 		plist::dictionary_t::const_iterator oldValue = oldDict.find(newValue.first);
-		if(boost::get<plist::dictionary_t>(&newValue.second) && oldValue != oldDict.end() && boost::get<plist::dictionary_t>(&oldValue->second))
+		if(::plist::get<plist::dictionary_t>(&newValue.second) && oldValue != oldDict.end() && ::plist::get<plist::dictionary_t>(&oldValue->second))
 		{
-			delta_plist_helper(boost::get<plist::dictionary_t>(oldValue->second), boost::get<plist::dictionary_t>(newValue.second), changed, deleted, newPath);
+			delta_plist_helper(::plist::get<plist::dictionary_t>(oldValue->second), ::plist::get<plist::dictionary_t>(newValue.second), changed, deleted, newPath);
 		}
-		else if(oldValue == oldDict.end() || !equal(oldValue->second, newValue.second))
+		else if(oldValue == oldDict.end() || !plist::equal(oldValue->second, newValue.second))
 		{
 			std::transform(newPath.begin(), newPath.end(), newPath.begin(), &encode_key);
 			changed.emplace(text::join(newPath, "."), newValue.second);
@@ -136,13 +136,13 @@ static void erase_key_path (plist::dictionary_t& plist, std::string const& keyPa
 
 		if(++key == v.end())
 			current->erase(it);
-		else if(current = boost::get<plist::dictionary_t>(&it->second))
+		else if(current = ::plist::get<plist::dictionary_t>(&it->second))
 			continue;
-		else if(plist::array_t* array = boost::get<plist::array_t>(&it->second))
+		else if(plist::array_t* array = ::plist::get<plist::array_t>(&it->second))
 		{
 			for(auto it = array->begin(); it != array->end(); ++it)
 			{
-				if(std::string* str = boost::get<std::string>(&(*it)))
+				if(std::string* str = ::plist::get<std::string>(&(*it)))
 				{
 					if(*str == *key)
 					{
@@ -180,9 +180,9 @@ static void update_key_path (plist::dictionary_t& plist, std::string const& keyP
 		}
 		else
 		{
-			if(current = boost::get<plist::dictionary_t>(&it->second))
+			if(current = ::plist::get<plist::dictionary_t>(&it->second))
 				continue;
-			else if(plist::array_t* array = boost::get<plist::array_t>(&it->second))
+			else if(plist::array_t* array = ::plist::get<plist::array_t>(&it->second))
 				array->push_back(*key);
 			else
 				os_log_error(OS_LOG_DEFAULT, "Unable to update key path ‘%{public}s’ for plist:\n%{public}s", keyPath.c_str(), to_s(plist).c_str());
@@ -204,17 +204,17 @@ namespace plist
 			if(plist.find("isDelta") != plist.end())
 			{
 				auto deletedIt = plist.find("deleted");
-				if(array_t const* deleted = deletedIt != plist.end() ? boost::get<array_t>(&deletedIt->second) : nullptr)
+				if(array_t const* deleted = deletedIt != plist.end() ? get<array_t>(&deletedIt->second) : nullptr)
 				{
 					for(auto item : *deleted)
 					{
-						if(std::string const* str = boost::get<std::string>(&item))
+						if(std::string const* str = get<std::string>(&item))
 							erase_key_path(res, *str);
 					}
 				}
 
 				auto changedIt = plist.find("changed");
-				if(dictionary_t const* changed = changedIt != plist.end() ? boost::get<dictionary_t>(&changedIt->second) : nullptr)
+				if(dictionary_t const* changed = changedIt != plist.end() ? get<dictionary_t>(&changedIt->second) : nullptr)
 				{
 					for(auto pair : *changed)
 						update_key_path(res, pair.first, pair.second);
