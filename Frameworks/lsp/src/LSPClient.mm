@@ -430,7 +430,7 @@ using json = nlohmann::json;
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	NSLog(@"[LSP] --> %s (id=%d)", method.UTF8String, reqId);
+	NSLog(@"[LSP] --> %s (id=%d) params=%s", method.UTF8String, reqId, params.dump().c_str());
 	if(callback)
 		_responseCallbacks[@(reqId)] = [callback copy];
 	[self sendMessage:msg];
@@ -466,7 +466,7 @@ using json = nlohmann::json;
 	return [NSNull null];
 }
 
-- (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback
+- (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
 {
 	if(!_initialized)
 	{
@@ -477,11 +477,12 @@ using json = nlohmann::json;
 
 	json params = {
 		{"textDocument", {{"uri", uri.UTF8String}}},
-		{"position", {{"line", (int)line}, {"character", (int)character}}}
+		{"position", {{"line", (int)line}, {"character", (int)character}}},
+		{"context", {{"triggerKind", 1}}}
 	};
 
 	[self sendRequest:@"textDocument/completion" params:params callback:^(id result) {
-		NSMutableArray<NSString*>* labels = [NSMutableArray new];
+		NSMutableArray<NSDictionary*>* suggestions = [NSMutableArray new];
 
 		NSArray* items = nil;
 		if([result isKindOfClass:[NSArray class]])
@@ -490,19 +491,27 @@ using json = nlohmann::json;
 		}
 		else if([result isKindOfClass:[NSDictionary class]])
 		{
-			// CompletionList { items: CompletionItem[] }
 			items = result[@"items"];
 		}
 
 		for(NSDictionary* item in items)
 		{
 			NSString* label = item[@"label"];
-			if(label.length > 0)
-				[labels addObject:label];
+			if(label.length == 0)
+				continue;
+
+			NSString* filterText = item[@"filterText"] ?: label;
+			NSString* insertText = item[@"insertText"] ?: label;
+
+			[suggestions addObject:@{
+				@"label":      label,
+				@"filterText": filterText,
+				@"insert":     insertText
+			}];
 		}
 
 		if(callback)
-			callback(labels);
+			callback(suggestions);
 	}];
 }
 

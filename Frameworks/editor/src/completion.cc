@@ -60,10 +60,6 @@ namespace ng
 		std::vector< std::pair<size_t, std::string> > tmp;
 		std::vector<std::string> commandResult;
 
-		// Fire-and-forget LSP completion request; results arrive asynchronously
-		if(_delegate)
-			_delegate->request_lsp_completions(bow, prefix);
-
 		// ====================================
 		// = Run Potential Completion Command =
 		// ====================================

@@ -11,7 +11,7 @@
 - (void)documentWillClose:(OakDocument*)document;
 - (void)shutdownAll;
 - (void)flushPendingChangesForDocument:(OakDocument*)document;
-- (void)requestCompletionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback;
+- (void)requestCompletionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character prefix:(NSString*)prefix completion:(void(^)(NSArray<NSDictionary*>*))callback;
 @end
 
 #endif /* LSP_MANAGER_H_POC */

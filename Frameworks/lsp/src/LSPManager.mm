@@ -322,14 +322,24 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 - (void)flushPendingChangesForDocument:(OakDocument*)document
 {
 	NSUUID* docId = document.identifier;
-	if(_changeTimers[docId])
-	{
-		[_changeTimers[docId] invalidate];
-		[self sendDidChangeForDocument:document];
-	}
+	if(![_openDocuments containsObject:docId])
+		return;
+
+	// Cancel any pending debounce timer
+	[_changeTimers[docId] invalidate];
+	[_changeTimers removeObjectForKey:docId];
+
+	// Always send current content so server has latest state
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+		return;
+
+	int version = [_documentVersions[docId] intValue] + 1;
+	_documentVersions[docId] = @(version);
+	[client documentDidChange:document version:version];
 }
 
-- (void)requestCompletionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback
+- (void)requestCompletionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character prefix:(NSString*)prefix completion:(void(^)(NSArray<NSDictionary*>*))callback
 {
 	NSUUID* docId = document.identifier;
 	LSPClient* client = _documentClients[docId];
@@ -351,7 +361,26 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	NSURL* fileURL = [NSURL fileURLWithPath:path];
 	NSString* uri = fileURL.absoluteString;
 
-	[client requestCompletionForURI:uri line:line character:character completion:callback];
+	[client requestCompletionForURI:uri line:line character:character completion:^(NSArray<NSDictionary*>* suggestions) {
+		if(prefix.length == 0 || suggestions.count == 0)
+		{
+			if(callback)
+				callback(suggestions);
+			return;
+		}
+
+		// Client-side filtering using filterText
+		NSMutableArray<NSDictionary*>* filtered = [NSMutableArray new];
+		for(NSDictionary* item in suggestions)
+		{
+			NSString* filterText = item[@"filterText"];
+			if([filterText rangeOfString:prefix options:(NSCaseInsensitiveSearch | NSAnchoredSearch)].location != NSNotFound)
+				[filtered addObject:item];
+		}
+
+		if(callback)
+			callback(filtered);
+	}];
 }
 
 #pragma mark - LSPClientDelegate

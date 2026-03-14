@@ -19,7 +19,7 @@
 - (void)documentDidSave:(OakDocument*)document;
 - (void)closeDocument:(OakDocument*)document;
 - (void)shutdown;
-- (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback;
+- (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback;
 @end
 
 #endif /* LSP_CLIENT_H_POC */
