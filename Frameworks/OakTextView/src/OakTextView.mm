@@ -1057,6 +1057,50 @@ static std::string shell_quote (std::vector<std::string> paths)
 	for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.document.will-save", [self scopeContext], bundles::kItemTypeMost, oak::uuid_t(), false))
 		[self performBundleItem:item];
 
+	if(documentView)
+	{
+		OakDocument* doc = self.document;
+		if(doc)
+		{
+			std::string filePath  = to_s(doc.path ?: @"");
+			std::string fileType  = to_s(doc.fileType ?: @"");
+			std::string directory = to_s(doc.directory ?: [doc.path stringByDeletingLastPathComponent] ?: @"");
+
+			settings_t const settings = settings_for_path(filePath, fileType, directory);
+			bool lspFormatOnSave = settings.get("lspFormatOnSave", false);
+
+			if(lspFormatOnSave && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc])
+			{
+				[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+
+				__block BOOL done = NO;
+				__block NSArray<NSDictionary*>* receivedEdits = nil;
+				ng::ranges_t capturedRanges = documentView->ranges();
+
+				[[LSPManager sharedManager] requestFormattingForDocument:doc
+					tabSize:doc.tabSize insertSpaces:doc.softTabs
+					completion:^(NSArray<NSDictionary*>* edits) {
+						receivedEdits = edits;
+						done = YES;
+					}];
+
+				NSDate* timeout = [NSDate dateWithTimeIntervalSinceNow:3.0];
+				while(!done && [timeout timeIntervalSinceNow] > 0)
+					CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+
+				if(!done)
+					NSLog(@"[LSP] Format-on-save timed out after 3 seconds");
+
+				if(receivedEdits.count > 0)
+				{
+					std::string result = applyTextEdits(*documentView, receivedEdits);
+					AUTO_REFRESH;
+					documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+				}
+			}
+		}
+	}
+
 	[self updateDocumentMetadata];
 }
 
@@ -3251,6 +3295,15 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 			}
 		}
 	}
+	else if([aMenuItem action] == @selector(lspFormatDocument:))
+	{
+		OakDocument* doc = self.document;
+		BOOL hasRange = doc && [[LSPManager sharedManager] serverSupportsRangeFormattingForDocument:doc];
+		BOOL hasDoc   = doc && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc];
+		BOOL showSelection = [self hasSelection] && hasRange;
+		[aMenuItem updateTitle:[NSString stringWithCxxString:format_string::replace(to_s(aMenuItem.title), "\\b(\\w+) / (Selection)\\b", showSelection ? "$2" : "$1")]];
+		return showSelection ? YES : hasDoc;
+	}
 	return YES;
 }
 
@@ -4939,6 +4992,117 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 - (void)referencesPanelDidClose:(OakReferencesPanel*)panel
 {
 	// No cleanup needed — panel can be reused
+}
+
+// = LSP Formatting =
+// ==================
+
+static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDictionary*>* edits)
+{
+	NSArray* sorted = [edits sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* a, NSDictionary* b) {
+		NSDictionary* aStart = a[@"range"][@"start"];
+		NSDictionary* bStart = b[@"range"][@"start"];
+		NSInteger aLine = [aStart[@"line"] integerValue];
+		NSInteger bLine = [bStart[@"line"] integerValue];
+		if(aLine != bLine)
+			return bLine < aLine ? NSOrderedAscending : NSOrderedDescending;
+		NSInteger aChar = [aStart[@"character"] integerValue];
+		NSInteger bChar = [bStart[@"character"] integerValue];
+		return bChar < aChar ? NSOrderedAscending : NSOrderedDescending;
+	}];
+
+	std::string content = buffer.substr(0, buffer.size());
+
+	for(NSDictionary* edit in sorted)
+	{
+		NSDictionary* range = edit[@"range"];
+		NSDictionary* start = range[@"start"];
+		NSDictionary* end   = range[@"end"];
+		NSString* newText   = edit[@"newText"];
+		if(!start || !end || !newText)
+			continue;
+
+		size_t startOffset = buffer.convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+		size_t endOffset   = buffer.convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+
+		startOffset = std::min(startOffset, buffer.size());
+		endOffset   = std::min(endOffset, buffer.size());
+		if(startOffset > endOffset)
+			std::swap(startOffset, endOffset);
+
+		content.replace(startOffset, endOffset - startOffset, to_s(newText));
+	}
+
+	return content;
+}
+
+- (void)lspFormatDocument:(id)sender
+{
+	if(!documentView)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	LSPManager* lsp = [LSPManager sharedManager];
+
+	bool hasSelection = documentView->has_selection();
+	ng::ranges_t capturedRanges = documentView->ranges();
+	size_t revision = documentView->revision();
+	NSUInteger tabSize = doc.tabSize;
+	BOOL insertSpaces = doc.softTabs;
+
+	[lsp flushPendingChangesForDocument:doc];
+
+	__weak OakTextView* weakSelf = self;
+
+	if(hasSelection && [lsp serverSupportsRangeFormattingForDocument:doc])
+	{
+		ng::range_t sel = capturedRanges.last();
+		text::pos_t startPos = documentView->convert(sel.min().index);
+		text::pos_t endPos   = documentView->convert(sel.max().index);
+
+		[lsp requestRangeFormattingForDocument:doc
+			startLine:startPos.line startCharacter:startPos.column
+			endLine:endPos.line endCharacter:endPos.column
+			tabSize:tabSize insertSpaces:insertSpaces
+			completion:^(NSArray<NSDictionary*>* edits) {
+				OakTextView* strongSelf = weakSelf;
+				if(!strongSelf || !strongSelf->documentView)
+					return;
+				if(!edits || edits.count == 0)
+					return;
+				if(strongSelf->documentView->revision() != revision)
+					return;
+
+				std::string result = applyTextEdits(*strongSelf->documentView, edits);
+				AUTO_REFRESH;
+				strongSelf->documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+			}];
+	}
+	else if([lsp serverSupportsFormattingForDocument:doc])
+	{
+		[lsp requestFormattingForDocument:doc
+			tabSize:tabSize insertSpaces:insertSpaces
+			completion:^(NSArray<NSDictionary*>* edits) {
+				OakTextView* strongSelf = weakSelf;
+				if(!strongSelf || !strongSelf->documentView)
+					return;
+				if(!edits || edits.count == 0)
+					return;
+				if(strongSelf->documentView->revision() != revision)
+					return;
+
+				std::string result = applyTextEdits(*strongSelf->documentView, edits);
+				AUTO_REFRESH;
+				strongSelf->documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+			}];
+	}
+	else
+	{
+		NSBeep();
+	}
 }
 
 // = LSP Completion =
