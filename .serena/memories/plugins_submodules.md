@@ -1,17 +1,16 @@
-# PlugIns are Git Submodules
+# PlugIns and Git Submodules
 
-The PlugIns directory contains two git submodules that must be initialized:
+## PlugIns
+The PlugIns directory contains two subdirectories (formerly git submodules, now incorporated):
 - `PlugIns/dialog/` → Dialog2.tmplugin + tm_dialog2 CLI tool
 - `PlugIns/dialog-1.x/` → Dialog.tmplugin + tm_dialog CLI tool
 
-Both have their own `default.rave` files with dual targets (CLI tool + plugin bundle).
-Plugin bundles use `-bundle` linker flag and `.tmplugin` extension.
+Both have their own `CMakeLists.txt` files. Plugin bundles use `-bundle` linker flag and `.tmplugin` extension.
 
-Other submodules in the repo:
-- `Applications/SyntaxMate/resources/SyntaxMate.tmBundle`
-- `Applications/TextMate/icons`
-- `bin/CxxTest`
-- `vendor/Onigmo/vendor`
-- `vendor/kvdb/vendor`
+## Active Submodules
+- `Applications/TextMate/icons` — app icon assets
+- `bin/CxxTest` — test framework
+- `vendor/Onigmo/vendor` — Onigmo regex engine
+- `vendor/kvdb/vendor` — kvdb key-value store
 
 Always run `git submodule update --init` when working with this repo.
