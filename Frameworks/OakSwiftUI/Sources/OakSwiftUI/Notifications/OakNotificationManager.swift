@@ -13,6 +13,9 @@ import Combine
 	private override init() {}
 
 	@objc public func show(message: String, type: Int) {
+		let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { return }
+
 		let toastType: ToastType
 		switch type {
 		case 1: toastType = .error
@@ -22,7 +25,7 @@ import Combine
 		default: toastType = .info
 		}
 		self.ensureWindow()
-		self.model.show(message: message, type: toastType)
+		self.model.show(message: trimmed, type: toastType)
 	}
 
 	private func ensureWindow() {

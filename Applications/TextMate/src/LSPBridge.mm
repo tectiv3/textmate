@@ -50,10 +50,16 @@
 {
 	NSString* message = note.userInfo[@"message"];
 	NSNumber* type = note.userInfo[@"type"];
-	if(!message) return;
+	if(!message || message.length == 0) return;
+
+	int lspType = type ? type.intValue : 3;
+
+	// LSP type 4 (Log) is too noisy for user-facing toasts — route to log panel only
+	if(lspType == 4)
+		return;
 
 	dispatch_async(dispatch_get_main_queue(), ^{
-		[OakNotificationManager.shared showWithMessage:message type:type ? type.intValue : 3];
+		[OakNotificationManager.shared showWithMessage:message type:lspType];
 	});
 }
 
