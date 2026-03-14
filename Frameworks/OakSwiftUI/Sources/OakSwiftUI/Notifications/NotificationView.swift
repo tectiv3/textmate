@@ -1,51 +1,52 @@
 import SwiftUI
 
 struct NotificationView: View {
-    @ObservedObject var model: ToastViewModel
-    
-    var body: some View {
-        VStack {
-            if let toast = model.currentToast {
-                HStack(spacing: 12) {
-                    Image(systemName: iconName(for: toast.type))
-                        .foregroundColor(color(for: toast.type))
-                    Text(toast.message)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.black.opacity(0.85))
-                .cornerRadius(12)
-                .shadow(radius: 6)
-                .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity),
-                                        removal: .move(edge: .top).combined(with: .opacity)))
-                .animation(.spring(), value: toast)
-                .onTapGesture {
-                    model.currentToast = nil
-                }
-            }
-            Spacer()
-        }
-        .padding(.top, 20)
-    }
-    
-    func iconName(for type: ToastType) -> String {
-        switch type {
-        case .info: return "info.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .error: return "xmark.circle.fill"
-        case .success: return "checkmark.circle.fill"
-        }
-    }
-    
-    func color(for type: ToastType) -> Color {
-        switch type {
-        case .info: return .blue
-        case .warning: return .orange
-        case .error: return .red
-        case .success: return .green
-        }
-    }
+	@ObservedObject var model: ToastViewModel
+
+	var body: some View {
+		VStack {
+			Spacer()
+			if let toast = model.currentToast {
+				HStack(spacing: 12) {
+					Image(systemName: iconName(for: toast.type))
+						.font(.system(size: 18))
+						.foregroundColor(color(for: toast.type))
+					Text(toast.message)
+						.font(.system(size: 14, weight: .medium))
+						.foregroundColor(.primary)
+						.lineLimit(2)
+				}
+				.padding(.horizontal, 20)
+				.padding(.vertical, 14)
+				.background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
+				.cornerRadius(12)
+				.shadow(color: .black.opacity(0.2), radius: 8, y: 2)
+				.transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+				                        removal: .opacity))
+				.onTapGesture {
+					withAnimation { model.currentToast = nil }
+				}
+			}
+		}
+		.animation(.easeInOut(duration: 0.3), value: model.currentToast)
+		.padding(.bottom, 8)
+	}
+
+	func iconName(for type: ToastType) -> String {
+		switch type {
+		case .info: return "info.circle.fill"
+		case .warning: return "exclamationmark.triangle.fill"
+		case .error: return "xmark.circle.fill"
+		case .success: return "checkmark.circle.fill"
+		}
+	}
+
+	func color(for type: ToastType) -> Color {
+		switch type {
+		case .info: return .blue
+		case .warning: return .orange
+		case .error: return .red
+		case .success: return .green
+		}
+	}
 }

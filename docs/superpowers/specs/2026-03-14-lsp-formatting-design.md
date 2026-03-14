@@ -45,7 +45,7 @@ Formatting support is advertised in the initialize response:
 - `documentFormattingProvider: true|false`
 - `documentRangeFormattingProvider: true|false`
 
-These are parsed from the initialize response and stored as properties on LSPClient. This is a new pattern — existing features (completion, hover, references) do not check capabilities. Formatting introduces capability parsing because the menu item needs to be grayed out when unsupported.
+These are parsed from the initialize response and stored as properties on LSPClient. This is a new pattern — existing features (completion, hover, references) do not check capabilities. Formatting introduces capability parsing because the menu item needs to be grayed out when unsupported. This begins a pattern that should eventually be applied to all LSP features.
 
 ## Architecture
 
@@ -79,7 +79,7 @@ New methods:
 
 If capability is unsupported, calls back with `nil` immediately.
 
-**Prerequisite:** Always call `flushPendingChangesForDocument:` before sending a formatting request to ensure the server has the latest document content via `textDocument/didChange`.
+**Prerequisite:** Always call `flushPendingChangesForDocument:` before sending a formatting request to ensure the server has the latest document content via `textDocument/didChange`. Note: `didChange` is a notification with no response, so there is no guarantee the server has processed it before receiving the formatting request. In practice, servers process messages sequentially and this is not an issue.
 
 ### Layer 3: OakTextView
 
@@ -88,15 +88,21 @@ If capability is unsupported, calls back with `nil` immediately.
 #### Manual Formatting
 
 Action method: `lspFormatDocument:`
-- If non-empty selection exists and server supports range formatting → send `textDocument/rangeFormatting` for selection
+- Capture current selection at request time (for range formatting)
+- If non-empty selection exists and server supports range formatting → send `textDocument/rangeFormatting` for captured selection
 - Otherwise if server supports document formatting → send `textDocument/formatting`
-- Apply result via `editor_t::handle_result`:
+- Apply result via `editor_t::handle_result` with `output_format::text`:
   - Full document: `output::replace_document` + `output_caret::interpolate_by_line`
-  - Range: `output::replace_selection` + `output_caret::interpolate_by_line`
+  - Range: `output::replace_input` with captured `inputRanges` + `output_caret::interpolate_by_line`
 
-Menu item: **Text → Format Code** (no default key equivalent)
+Using `replace_input` with captured `inputRanges` (not `replace_selection`) for range formatting ensures correctness even if the user moves the cursor between request and response.
+
+Menu item: **Text → Format Code / Selection** (no default key equivalent)
+- Title dynamically updates: "Format Code" when no selection, "Format Selection" when there is one (using existing `updateTitle:` pattern with `"\\b(\\w+) / (Selection)\\b"` regex)
 - Grayed out via `validateMenuItem:` when server doesn't advertise formatting support or no LSP client is connected
 - Users can bind their own shortcut via macOS System Settings or `.tm_properties`
+
+**Staleness guard:** Track a revision counter (incrementing on each buffer modification). Capture it at request time. When the response arrives, compare against current revision — if they differ, discard the response (the buffer has changed during the round-trip).
 
 #### Format-on-Save
 
@@ -106,14 +112,16 @@ In `documentWillSave:`, after existing bundle callbacks:
    - Flush pending changes via `flushPendingChangesForDocument:`
    - Send `textDocument/formatting` request
    - Spin run loop until response arrives (timeout: 3 seconds)
-   - Apply result via `handle_result` with `output::replace_document` + `output_caret::interpolate_by_line`
+   - Apply result via `handle_result` with `output_format::text`, `output::replace_document` + `output_caret::interpolate_by_line`
    - On timeout: proceed with save silently (log warning to console)
    - On nil/error response: proceed with save silently
 3. Save proceeds with formatted buffer
 
-The run loop spin ensures the save blocks until formatting completes, matching the behavior of existing bundle-based formatters (e.g., Prettier via `callback.document.will-save`).
+The run loop spin ensures the save blocks until formatting completes. This matches the behavior of existing bundle-based formatters — `executeBundleCommand:` uses `CFRunLoopRunInMode` in a modal event loop (OakTextView.mm:5129-5156) that blocks until the command terminates.
 
 **Interaction with bundle will-save callbacks:** LSP formatting runs *after* bundle `callback.document.will-save` items. Users should not enable both a bundle-based formatter (e.g., Prettier) and `lspFormatOnSave` for the same file type — the LSP formatter would re-format already-formatted output. This is documented but not enforced.
+
+No staleness guard needed for format-on-save since the run loop spin blocks user input.
 
 ## Settings
 
@@ -148,18 +156,19 @@ This is the same mechanism used by bundle commands with "Caret Placement: Line I
 The LSP server returns an array of TextEdits (non-overlapping ranges + replacement text). The implementation:
 
 1. **Sort** TextEdits in reverse document order (bottom-to-top, right-to-left) to avoid offset invalidation
-2. **Convert** LSP line:character positions to buffer byte offsets. LSP uses UTF-16 code units for character offsets by default — the conversion must account for this when documents contain multi-byte characters (emoji, CJK). Use the existing `document_view_t::convert` method which handles `text::pos_t` → buffer offset.
+2. **Convert** LSP line:character positions to buffer byte offsets using `buffer_t::convert(text::pos_t(line, column))`. Note: this treats `column` as a byte offset from line start, not a UTF-16 code unit offset. This is a known limitation inherited from all existing LSP features (completion, hover, go-to-def, references). Documents with characters where UTF-8 byte count differs from UTF-16 code unit count (emoji, some CJK) may produce incorrect offsets. Fixing this requires a UTF-16-to-UTF-8 conversion layer that is out of scope for this feature.
 3. **Apply** all edits to the original document text to produce the formatted result
-4. **Replace** the entire document through `handle_result` with `output::replace_document`
+4. **Replace** the entire document through `handle_result` with `output_format::text`, `output::replace_document`
 
 This creates a single undo step, enables line interpolation for cursor preservation, and matches the behavior of existing bundle-based formatters.
 
-For range formatting with `output::replace_selection`, only the selection content is reconstructed and replaced.
+For range formatting with `output::replace_input`, only the captured selection range is replaced.
 
 **Edge cases:**
 - Empty TextEdit array or null response: no-op
 - TextEdit range beyond document bounds: clamp to document end
 - Server error response: no-op, log warning
+- Buffer modified between request and response (manual trigger only): discard response
 
 ## Menu Structure
 
@@ -169,5 +178,5 @@ Text
   Show Hover Info          ⌃⌘I
   Find References          ⌃⌘R
   ──────────────────────────────
-  Format Code                        ← new (no default shortcut)
+  Format Code / Selection            ← new (no default shortcut)
 ```

@@ -2,73 +2,61 @@ import AppKit
 import SwiftUI
 import Combine
 
-@objc public class OakNotificationManager: NSObject, @unchecked Sendable {
-    @objc public static let shared = OakNotificationManager()
-    
-    private let model = ToastViewModel()
-    // Accessed only on Main Thread
-    private var windowController: NSWindowController?
-    private var cancellables = Set<AnyCancellable>()
-    
-    private override init() {}
-    
-    @objc public func show(message: String, type: Int) {
-        let toastType: ToastType
-        switch type {
-        case 1: toastType = .error
-        case 2: toastType = .warning
-        case 3: toastType = .info
-        case 4: toastType = .info
-        default: toastType = .info
-        }
-        
-        Task { @MainActor in
-            self.performShow(message: message, type: toastType)
-        }
-    }
-    
-    @MainActor
-    private func performShow(message: String, type: ToastType) {
-        self.ensureWindow()
-        self.model.show(message: message, type: type)
-    }
-    
-    @MainActor
-    private func ensureWindow() {
-        if windowController == nil {
-            let view = NotificationView(model: model)
-            let hostingController = NSHostingController(rootView: view)
-            hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
-            
-            // Create a transparent, borderless window
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 100),
-                                  styleMask: [.borderless],
-                                  backing: .buffered, defer: false)
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.level = .floating
-            window.ignoresMouseEvents = true 
-            window.hasShadow = false
-            
-            // Center horizontally at top of screen
-            if let screen = NSScreen.main {
-                let screenRect = screen.visibleFrame
-                let x = screenRect.midX - 200
-                let y = screenRect.maxY - 150
-                window.setFrameOrigin(NSPoint(x: x, y: y))
-            }
-            
-            window.contentViewController = hostingController
-            windowController = NSWindowController(window: window)
-            windowController?.showWindow(nil)
-            
-            // Update mouse interaction based on toast presence
-            model.$currentToast
-                .receive(on: DispatchQueue.main)
-                .sink { [weak window] toast in
-                    window?.ignoresMouseEvents = (toast == nil)
-                }
-                .store(in: &cancellables)
-        }
-    }
+@MainActor
+@objc public class OakNotificationManager: NSObject {
+	@objc public static let shared = OakNotificationManager()
+
+	private let model = ToastViewModel()
+	private var windowController: NSWindowController?
+	private var cancellables = Set<AnyCancellable>()
+
+	private override init() {}
+
+	@objc public func show(message: String, type: Int) {
+		let toastType: ToastType
+		switch type {
+		case 1: toastType = .error
+		case 2: toastType = .warning
+		case 3: toastType = .info
+		case 4: toastType = .success
+		default: toastType = .info
+		}
+		self.ensureWindow()
+		self.model.show(message: message, type: toastType)
+	}
+
+	private func ensureWindow() {
+		if windowController != nil { return }
+
+		let view = NotificationView(model: model)
+		let hostingView = NSHostingView(rootView: view)
+
+		let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 500, height: 80),
+		                     styleMask: [.borderless, .nonactivatingPanel],
+		                     backing: .buffered, defer: false)
+		window.isOpaque = false
+		window.backgroundColor = .clear
+		window.level = .floating
+		window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+		window.ignoresMouseEvents = true
+		window.hasShadow = false
+
+		if let screen = NSScreen.main {
+			let screenRect = screen.visibleFrame
+			let x = screenRect.midX - 250
+			let y = screenRect.origin.y + 40
+			window.setFrameOrigin(NSPoint(x: x, y: y))
+		}
+
+		window.contentView = hostingView
+		windowController = NSWindowController(window: window)
+		windowController?.showWindow(nil)
+
+		model.$currentToast
+			.receive(on: DispatchQueue.main)
+			.sink { [weak window] toast in
+				window?.ignoresMouseEvents = (toast == nil)
+			}
+			.store(in: &cancellables)
+	}
 }

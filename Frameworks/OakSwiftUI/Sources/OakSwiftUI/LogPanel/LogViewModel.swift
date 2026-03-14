@@ -5,7 +5,7 @@ public struct LogEntry: Identifiable, Equatable {
     public let id = UUID()
     public let date = Date()
     public let message: String
-    public let level: Int // 0: debug, 1: info, 2: warning, 3: error
+    public let level: Int // LSP MessageType: 1=Error, 2=Warning, 3=Info, 4=Log
     public let source: String
 }
 

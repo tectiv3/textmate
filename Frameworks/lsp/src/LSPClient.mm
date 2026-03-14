@@ -248,55 +248,72 @@ using json = nlohmann::json;
 
 - (void)handleShowMessage:(json const&)params
 {
-	int type = params["type"].get<int>();
-	std::string message = params["message"].get<std::string>();
-	
-	[[NSNotificationCenter defaultCenter] postNotificationName:LSPShowMessageNotification object:self userInfo:@{
-		@"type": @(type),
-		@"message": [NSString stringWithUTF8String:message.c_str()]
-	}];
+	if(!params.contains("type") || !params.contains("message"))
+		return;
+
+	try {
+		int type = params["type"].get<int>();
+		std::string message = params["message"].get<std::string>();
+
+		[[NSNotificationCenter defaultCenter] postNotificationName:LSPShowMessageNotification object:self userInfo:@{
+			@"type": @(type),
+			@"message": [NSString stringWithUTF8String:message.c_str()]
+		}];
+	} catch(std::exception const& e) {
+		NSLog(@"[LSP] Failed to parse showMessage: %s", e.what());
+	}
 }
 
 - (void)handleLogMessage:(json const&)params
 {
-	int type = params["type"].get<int>();
-	std::string message = params["message"].get<std::string>();
-	
-	NSString* nsMessage = [NSString stringWithUTF8String:message.c_str()];
-	// Log directly to avoid double prefixing
-	NSLog(@"[LSP] [Server] %@", nsMessage);
-	[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{@"message": nsMessage, @"type": @(type), @"source": @"server"}];
+	if(!params.contains("type") || !params.contains("message"))
+		return;
+
+	try {
+		int type = params["type"].get<int>();
+		std::string message = params["message"].get<std::string>();
+
+		NSString* nsMessage = [NSString stringWithUTF8String:message.c_str()];
+		NSLog(@"[LSP] [Server] %@", nsMessage);
+		[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{@"message": nsMessage, @"type": @(type), @"source": @"server"}];
+	} catch(std::exception const& e) {
+		NSLog(@"[LSP] Failed to parse logMessage: %s", e.what());
+	}
 }
 
 - (void)handleProgress:(json const&)params
 {
-	id token = nil;
-	if(params.contains("token"))
-	{
-		if(params["token"].is_string())
-			token = [NSString stringWithUTF8String:params["token"].get<std::string>().c_str()];
-		else
-			token = @(params["token"].get<int>());
+	try {
+		id token = nil;
+		if(params.contains("token"))
+		{
+			if(params["token"].is_string())
+				token = [NSString stringWithUTF8String:params["token"].get<std::string>().c_str()];
+			else if(params["token"].is_number())
+				token = @(params["token"].get<int>());
+		}
+
+		if(!params.contains("value") || !params["value"].contains("kind"))
+			return;
+
+		auto const& value = params["value"];
+		std::string kind = value["kind"].get<std::string>();
+
+		NSMutableDictionary* info = [NSMutableDictionary dictionary];
+		if(token) info[@"token"] = token;
+		info[@"kind"] = [NSString stringWithUTF8String:kind.c_str()];
+
+		if(value.contains("title"))
+			info[@"title"] = [NSString stringWithUTF8String:value["title"].get<std::string>().c_str()];
+		if(value.contains("message"))
+			info[@"message"] = [NSString stringWithUTF8String:value["message"].get<std::string>().c_str()];
+		if(value.contains("percentage"))
+			info[@"percentage"] = @(value["percentage"].get<int>());
+
+		[[NSNotificationCenter defaultCenter] postNotificationName:LSPProgressNotification object:self userInfo:info];
+	} catch(std::exception const& e) {
+		NSLog(@"[LSP] Failed to parse progress: %s", e.what());
 	}
-	
-	if(!params.contains("value"))
-		return;
-		
-	auto const& value = params["value"];
-	std::string kind = value["kind"].get<std::string>();
-	
-	NSMutableDictionary* info = [NSMutableDictionary dictionary];
-	if(token) info[@"token"] = token;
-	info[@"kind"] = [NSString stringWithUTF8String:kind.c_str()];
-	
-	if(value.contains("title"))
-		info[@"title"] = [NSString stringWithUTF8String:value["title"].get<std::string>().c_str()];
-	if(value.contains("message"))
-		info[@"message"] = [NSString stringWithUTF8String:value["message"].get<std::string>().c_str()];
-	if(value.contains("percentage"))
-		info[@"percentage"] = @(value["percentage"].get<int>());
-		
-	[[NSNotificationCenter defaultCenter] postNotificationName:LSPProgressNotification object:self userInfo:info];
 }
 
 - (void)handleMessage:(json const&)msg

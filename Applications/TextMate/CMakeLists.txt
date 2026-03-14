@@ -18,8 +18,16 @@ if(OakSwiftUI_LIB)
   target_link_libraries(TextMate PRIVATE ${OakSwiftUI_LIB})
   target_compile_definitions(TextMate PRIVATE HAVE_OAK_SWIFTUI=1)
 
-  # Include path for generated Swift header
-  target_include_directories(TextMate PRIVATE "${CMAKE_SOURCE_DIR}/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUI.build/include")
+  # Include path for generated Swift header (architecture triple matches host)
+  execute_process(COMMAND swift -print-target-info
+    OUTPUT_VARIABLE _swift_target_info OUTPUT_STRIP_TRAILING_WHITESPACE)
+  string(JSON _swift_triple GET "${_swift_target_info}" "target" "unversionedTriple")
+  string(TOLOWER "${CMAKE_BUILD_TYPE}" _swift_config)
+  if(NOT _swift_config OR _swift_config STREQUAL "")
+    set(_swift_config "debug")
+  endif()
+  target_include_directories(TextMate PRIVATE
+    "${CMAKE_SOURCE_DIR}/Frameworks/OakSwiftUI/.build/${_swift_triple}/${_swift_config}/OakSwiftUI.build/include")
 
   # Copy dylib into app bundle and set rpath
   add_custom_command(TARGET TextMate POST_BUILD

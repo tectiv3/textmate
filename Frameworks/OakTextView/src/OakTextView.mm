@@ -4023,7 +4023,11 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	{
 		_showDefinitionCursor = flag;
 		if(!flag)
+		{
 			[self clearDefinitionHighlight];
+			// Force immediate cursor update so hand doesn't stick after Cmd release
+			[[NSCursor IBeamCursor] set];
+		}
 		[[self window] invalidateCursorRectsForView:self];
 	}
 }
@@ -4047,7 +4051,7 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	if(_definitionTrackingArea)
 		[self removeTrackingArea:_definitionTrackingArea];
 	_definitionTrackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds
-		options:(NSTrackingMouseMoved | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+		options:(NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
 		owner:self userInfo:nil];
 	[self addTrackingArea:_definitionTrackingArea];
 }
@@ -4082,23 +4086,34 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		return;
 	}
 
-	// LSP hover: start/restart timer when mouse moves over a new position
+	// LSP hover: only trigger when mouse is directly over a word character
 	if([[LSPManager sharedManager] hasClientForDocument:self.document])
 	{
 		if(index != _lspHoverIndex)
 		{
 			_lspHoverIndex = index;
 			[self cancelLSPHoverRequest];
-
-			// Dismiss existing tooltip when moving to a new position
 			[_lspHoverTooltip dismiss];
 
-			__weak OakTextView* weakSelf = self;
-			_lspHoverTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer* timer) {
-				[weakSelf lspRequestHoverAtIndex:index];
-			}];
+			std::string ch = documentView->substr(index.index, index.index + 1);
+			bool onWord = !ch.empty() && (isalnum((unsigned char)ch[0]) || ch[0] == '_');
+
+			if(onWord)
+			{
+				__weak OakTextView* weakSelf = self;
+				_lspHoverTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer* timer) {
+					[weakSelf lspRequestHoverAtIndex:index];
+				}];
+			}
 		}
 	}
+}
+
+- (void)mouseExited:(NSEvent*)anEvent
+{
+	[self cancelLSPHoverRequest];
+	[_lspHoverTooltip dismiss];
+	_lspHoverIndex = ng::index_t();
 }
 
 - (void)clearDefinitionHighlight
