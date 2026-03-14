@@ -536,6 +536,9 @@ private:
 @property (nonatomic) NSTimer* dragScrollTimer;
 @property (nonatomic) BOOL showDragCursor;
 @property (nonatomic) BOOL showColumnSelectionCursor;
+@property (nonatomic) BOOL showDefinitionCursor;
+@property (nonatomic) ng::range_t definitionHighlightRange;
+@property (nonatomic) NSTrackingArea* definitionTrackingArea;
 @property (nonatomic) OakChoiceMenu* choiceMenu;
 @property (nonatomic) LiveSearchView* liveSearchView;
 @property (nonatomic, copy) NSString* liveSearchString;
@@ -849,6 +852,8 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 - (void)setDocument:(OakDocument*)aDocument
 {
+	_definitionHighlightRange = ng::range_t();
+
 	if(aDocument && [_document isEqual:aDocument])
 	{
 		if(_document.selection)
@@ -1223,6 +1228,23 @@ doScroll:
 	};
 
 	documentView->draw(ng::context_t(context, _showInvisibles ? documentView->invisibles_map : NULL_STR, [spellingDotImage CGImageForProposedRect:NULL context:[NSGraphicsContext currentContext] hints:nil], foldingDotsFactory), aRect, [self isFlipped], merge(documentView->ranges(), [self markedRanges]), _liveSearchRanges);
+
+	// Draw definition highlight underline when Cmd-hovering
+	if(!_definitionHighlightRange.empty() && _definitionHighlightRange.max().index <= documentView->size())
+	{
+		CGRect wordRect = documentView->rect_for_range(_definitionHighlightRange.min().index, _definitionHighlightRange.max().index);
+		if(NSIntersectsRect(aRect, NSRectFromCGRect(wordRect)))
+		{
+			NSColor* linkColor = [NSColor linkColor];
+			[linkColor setStroke];
+			CGFloat y = CGRectGetMaxY(wordRect) - 1;
+			NSBezierPath* underline = [NSBezierPath bezierPath];
+			[underline moveToPoint:NSMakePoint(CGRectGetMinX(wordRect), y)];
+			[underline lineToPoint:NSMakePoint(CGRectGetMaxX(wordRect), y)];
+			[underline setLineWidth:1.0];
+			[underline stroke];
+		}
+	}
 }
 
 // =====================
@@ -2288,9 +2310,11 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 - (void)flagsChanged:(NSEvent*)anEvent
 {
 	NSInteger modifiers  = [anEvent modifierFlags] & (NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCommand | NSEventModifierFlagShift);
-	BOOL isHoldingOption = modifiers & NSEventModifierFlagOption ? YES : NO;
+	BOOL isHoldingOption  = modifiers & NSEventModifierFlagOption ? YES : NO;
+	BOOL isHoldingCommand = modifiers == NSEventModifierFlagCommand;
 
 	self.showColumnSelectionCursor = isHoldingOption;
+	self.showDefinitionCursor = isHoldingCommand && [[LSPManager sharedManager] hasClientForDocument:self.document];
 	if(([NSEvent pressedMouseButtons] & 1))
 	{
 		if(documentView->has_selection() && documentView->ranges().last().columnar != isHoldingOption)
@@ -3912,7 +3936,18 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 
 - (void)resetCursorRects
 {
-	[self addCursorRect:[self visibleRect] cursor:_showDragCursor ? [NSCursor arrowCursor] : (_showColumnSelectionCursor ? [NSCursor crosshairCursor] : [self ibeamCursor])];
+	[self addCursorRect:[self visibleRect] cursor:_showDragCursor ? [NSCursor arrowCursor] : (_showDefinitionCursor ? [NSCursor pointingHandCursor] : (_showColumnSelectionCursor ? [NSCursor crosshairCursor] : [self ibeamCursor]))];
+}
+
+- (void)setShowDefinitionCursor:(BOOL)flag
+{
+	if(flag != _showDefinitionCursor)
+	{
+		_showDefinitionCursor = flag;
+		if(!flag)
+			[self clearDefinitionHighlight];
+		[[self window] invalidateCursorRectsForView:self];
+	}
 }
 
 - (void)setShowDragCursor:(BOOL)flag
@@ -3922,6 +3957,51 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		_showDragCursor = flag;
 		[[self window] invalidateCursorRectsForView:self];
 	}
+}
+
+// =============================
+// = Definition Highlight (⌘) =
+// =============================
+
+- (void)updateTrackingAreas
+{
+	[super updateTrackingAreas];
+	if(_definitionTrackingArea)
+		[self removeTrackingArea:_definitionTrackingArea];
+	_definitionTrackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds
+		options:(NSTrackingMouseMoved | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+		owner:self userInfo:nil];
+	[self addTrackingArea:_definitionTrackingArea];
+}
+
+- (void)mouseMoved:(NSEvent*)anEvent
+{
+	if(!_showDefinitionCursor || !documentView)
+		return;
+
+	NSPoint pos = [self convertPoint:[anEvent locationInWindow] fromView:nil];
+	ng::index_t index = documentView->index_at_point(pos);
+	ng::range_t wordRange = ng::extend(*documentView, index, kSelectionExtendToWord).last();
+
+	// Only highlight actual words (non-empty, not whitespace)
+	std::string word = documentView->substr(wordRange.min().index, wordRange.max().index);
+	bool isWord = !word.empty() && (isalnum(word[0]) || word[0] == '_');
+
+	ng::range_t newRange = isWord ? wordRange : ng::range_t();
+	if(newRange != _definitionHighlightRange)
+	{
+		[self clearDefinitionHighlight];
+		_definitionHighlightRange = newRange;
+		if(!newRange.empty())
+			[self setNeedsDisplayInRect:NSRectFromCGRect(documentView->rect_for_range(newRange.min().index, newRange.max().index))];
+	}
+}
+
+- (void)clearDefinitionHighlight
+{
+	if(!_definitionHighlightRange.empty() && documentView)
+		[self setNeedsDisplayInRect:NSRectFromCGRect(documentView->rect_for_range(_definitionHighlightRange.min().index, _definitionHighlightRange.max().index))];
+	_definitionHighlightRange = ng::range_t();
 }
 
 // =================
@@ -3976,6 +4056,42 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 
 	if(commandDown)
 	{
+		if(mouseDownClickCount == 1 && [[LSPManager sharedManager] hasClientForDocument:self.document])
+		{
+			[self clearDefinitionHighlight];
+
+			size_t clickIndex = index.index;
+			text::pos_t pos = documentView->convert(clickIndex);
+
+			OakDocument* doc = self.document;
+			[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+			[[LSPManager sharedManager] requestDefinitionForDocument:doc
+				line:pos.line
+				character:pos.column
+				completion:^(NSArray<NSDictionary*>* locations) {
+					if(locations.count == 0)
+					{
+						NSLog(@"[LSP] Cmd+Click: no definition found");
+						return;
+					}
+
+					NSDictionary* loc = locations.firstObject;
+					NSString* uri = loc[@"uri"];
+					NSUInteger line = [loc[@"line"] unsignedIntegerValue];
+					NSUInteger character = [loc[@"character"] unsignedIntegerValue];
+
+					NSURL* url = [NSURL URLWithString:uri];
+					NSString* filePath = url.path;
+					if(!filePath)
+						return;
+
+					OakDocument* targetDoc = [OakDocumentController.sharedInstance documentWithPath:filePath];
+					text::range_t selection(text::pos_t(line, character));
+					[OakDocumentController.sharedInstance showDocument:targetDoc andSelect:selection inProject:nil bringToFront:YES];
+				}];
+			return;
+		}
+
 		if(mouseDownClickCount == 1)
 		{
 			ng::index_t click = range.last().min();

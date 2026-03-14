@@ -408,6 +408,11 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestDefinitionForURI:uri line:line character:character completion:callback];
 }
 
+- (BOOL)hasClientForDocument:(OakDocument*)document
+{
+	return document && _documentClients[document.identifier] != nil;
+}
+
 #pragma mark - LSPClientDelegate
 
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri

@@ -370,7 +370,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 				{ @"SCM Status",       @selector(goToSCMDataSource:),      @"Y"   },
 				{ @"Computer",         @selector(goToComputer:),           @"C"   },
 				{ @"Home",             @selector(goToHome:),               @"H"   },
-				{ @"Desktop",          @selector(goToDesktop:),            @"D"   },
+				{ @"Desktop",          @selector(goToDesktop:)                    },
 				{ @"Favorites",        @selector(goToFavorites:)                  },
 				{ /* -------- */ },
 				{ @"Go to Folder…",    @selector(orderFrontGoToFolder:)           },
