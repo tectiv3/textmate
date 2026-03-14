@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/master.swiftdeps"
+  },
+  "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/Tests/OakSwiftUITests/OakSwiftUITests.swift": {
+    "dependencies": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/OakSwiftUITests.d",
+    "object": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/OakSwiftUITests.swift.o",
+    "swiftmodule": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/OakSwiftUITests~partial.swiftmodule",
+    "swift-dependencies": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/OakSwiftUITests.swiftdeps",
+    "diagnostics": "/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUITests.build/OakSwiftUITests.dia"
+  }
+}

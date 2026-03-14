@@ -1,0 +1,17 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/fenrir/code/textmate/.claude/worktrees/add-ui-swiftui-framework/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/libOakSwiftUI.dylib'
+relocations:
+  - { offset: 0x88C42, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7version_WZ', symObjAddr: 0x0, symBinAddr: 0xC90, symSize: 0x40 }
+  - { offset: 0x88C66, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7versionSSvpZ', symObjAddr: 0x1A90, symBinAddr: 0x8160, symSize: 0x0 }
+  - { offset: 0x88C74, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7version_WZ', symObjAddr: 0x0, symBinAddr: 0xC90, symSize: 0x40 }
+  - { offset: 0x88C8E, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7versionSSvau', symObjAddr: 0x40, symBinAddr: 0xCD0, symSize: 0x50 }
+  - { offset: 0x88D3B, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCMa', symObjAddr: 0x1C4, symBinAddr: 0xE54, symSize: 0x24 }
+  - { offset: 0x88D4F, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCfETo', symObjAddr: 0x250, symBinAddr: 0xEE0, symSize: 0x14 }
+  - { offset: 0x88DA6, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7versionSSvgZ', symObjAddr: 0x90, symBinAddr: 0xD20, symSize: 0x40 }
+  - { offset: 0x88DEA, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkC7versionSSvgZTo', symObjAddr: 0xD0, symBinAddr: 0xD60, symSize: 0x54 }
+  - { offset: 0x88DFE, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCACycfC', symObjAddr: 0x124, symBinAddr: 0xDB4, symSize: 0x24 }
+  - { offset: 0x88E12, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCACycfc', symObjAddr: 0x148, symBinAddr: 0xDD8, symSize: 0x7C }
+  - { offset: 0x88E36, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCACycfcTo', symObjAddr: 0x1E8, symBinAddr: 0xE78, symSize: 0x20 }
+  - { offset: 0x88E51, size: 0x8, addend: 0x0, symName: '_$s10OakSwiftUI0aB11UIFrameworkCfD', symObjAddr: 0x208, symBinAddr: 0xE98, symSize: 0x48 }
+...
