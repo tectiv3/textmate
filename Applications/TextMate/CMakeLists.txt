@@ -4,7 +4,7 @@ target_sources(TextMate PRIVATE ${_src})
 
 # Internal framework dependencies
 target_link_libraries(TextMate PRIVATE
-  BundleEditor BundleMenu BundlesManager CommitWindow CrashReporter DocumentWindow
+  BundleEditor BundleMenu BundlesManager CommitWindow DocumentWindow
   Find HTMLOutputWindow MenuBuilder OakAppKit OakCommand OakFilterList OakFoundation
   OakSystem OakTextView Preferences authorization bundles cf command
   crash document io kvdb license ns plist regexp scm settings text theme

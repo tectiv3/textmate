@@ -75,5 +75,3 @@ extern NSString* const kUserDefaultsLineNumbersKey;
 // =========
 
 extern NSString* const kUserDefaultsFolderSearchFollowLinksKey;
-extern NSString* const kUserDefaultsDisableCrashReportingKey;
-extern NSString* const kUserDefaultsCrashReportsContactInfoKey;
