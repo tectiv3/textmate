@@ -1,6 +1,6 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
-#import <lsp/LSPClient.h>
+#import <lsp/LSPManager.h>
 #import "OTVStatusBar.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
@@ -41,8 +41,6 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSMutableArray* bottomAuxiliaryViews;
 
 	IBOutlet NSPanel* tabSizeSelectorPanel;
-
-	LSPClient* _lspClient;
 }
 @property (nonatomic, readonly) OTVStatusBar* statusBar;
 @property (nonatomic) SymbolChooser* symbolChooser;
@@ -303,12 +301,9 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		for(NSString* key in documentKeys)
 			[oldDocument removeObserver:self forKeyPath:key];
 		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentMarksDidChangeNotification object:oldDocument];
-	}
-
-	if(_lspClient && !aDocument)
-	{
-		[_lspClient shutdown];
-		_lspClient = nil;
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentContentDidChangeNotification object:oldDocument];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentDidSaveNotification object:oldDocument];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentWillCloseNotification object:oldDocument];
 	}
 
 	if(aDocument)
@@ -317,30 +312,17 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	if(_document = aDocument)
 	{
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentMarksDidChange:) name:OakDocumentMarksDidChangeNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentContentDidChange:) name:OakDocumentContentDidChangeNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentDidSave:) name:OakDocumentDidSaveNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentWillClose:) name:OakDocumentWillCloseNotification object:self.document];
 		for(NSString* key in documentKeys)
 			[self.document addObserver:self forKeyPath:key options:NSKeyValueObservingOptionInitial context:nullptr];
 	}
 
 	[_textView setDocument:self.document];
+	[LSPManager.sharedManager documentDidOpen:aDocument];
 	[gutterView reloadData:self];
 	[self updateStyle];
-
-	// LSP PoC: spawn intelephense if TM_ENABLE_IS is set
-	if(aDocument.path)
-	{
-		auto vars = variables_for_path({}, to_s(aDocument.path), to_s(aDocument.fileType), to_s(aDocument.directory ?: [aDocument.path stringByDeletingLastPathComponent]));
-		if(auto it = vars.find("TM_ENABLE_IS"); it != vars.end() && it->second == "true")
-		{
-			if(!_lspClient)
-			{
-				NSString* rootDir = aDocument.directory ?: [aDocument.path stringByDeletingLastPathComponent];
-				_lspClient = [[LSPClient alloc] initWithCommand:@"/opt/homebrew/bin/intelephense"
-				                                      arguments:@[@"--stdio"]
-				                               workingDirectory:rootDir];
-			}
-			[_lspClient openDocument:aDocument languageId:@"php"];
-		}
-	}
 
 	if(_symbolChooser)
 	{
@@ -816,6 +798,21 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)documentMarksDidChange:(NSNotification*)aNotification
 {
 	[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+}
+
+- (void)documentContentDidChange:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentDidChange:notification.object];
+}
+
+- (void)documentDidSave:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentDidSave:notification.object];
+}
+
+- (void)documentWillClose:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentWillClose:notification.object];
 }
 
 // ============
