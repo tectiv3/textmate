@@ -48,9 +48,7 @@
 #import <io/exec.h>
 #import <Find/Find.h>
 
-#if HAVE_OAK_SWIFTUI
-#import <OakSwiftUI/OakSwiftUI-Swift.h>
-#endif
+#import "OakSwiftUI-Swift.h"
 
 int32_t const NSWrapColumnWindowWidth =  0;
 int32_t const NSWrapColumnAskUser     = -1;
@@ -516,14 +514,10 @@ private:
 	// = LSP Completion =
 	// ==================
 
-#if HAVE_OAK_SWIFTUI
 	OakCompletionPopup* _lspCompletionPopup;
 	OakThemeEnvironment* _lspTheme;
 	NSUInteger _lspInitialPrefixLength;
 	NSString* _lspFilterPrefix;
-#else
-	NSArray<NSDictionary*>* _lspSuggestions;
-#endif
 
 	// =================
 	// = Accessibility =
@@ -2249,7 +2243,6 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 {
 	AUTO_REFRESH;
 
-#if HAVE_OAK_SWIFTUI
 	if([_lspCompletionPopup isVisible])
 	{
 		if([_lspCompletionPopup handleKeyEvent:anEvent])
@@ -2288,7 +2281,6 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 			}
 		}
 	}
-#endif
 
 	if(!_choiceMenu)
 		return [self oldKeyDown:anEvent];
@@ -4725,16 +4717,10 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 			if(!strongSelf || suggestions.count == 0)
 				return;
 
-#if HAVE_OAK_SWIFTUI
 			[strongSelf showLSPCompletionPopupWithSuggestions:suggestions prefixLength:prefixLen];
-#else
-			strongSelf->_lspSuggestions = suggestions;
-			[strongSelf performSelector:@selector(showLSPCompletionMenu) withObject:nil afterDelay:0];
-#endif
 		}];
 }
 
-#if HAVE_OAK_SWIFTUI
 - (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen
 {
 	if(!documentView)
@@ -4777,55 +4763,6 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	[_lspCompletionPopup showIn:self at:caretPoint items:items];
 }
-#endif
-
-#if !HAVE_OAK_SWIFTUI
-- (void)showLSPCompletionMenu
-{
-	NSArray<NSDictionary*>* suggestions = _lspSuggestions;
-	_lspSuggestions = nil;
-
-	if(!suggestions.count || !documentView)
-		return;
-
-	NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
-	for(NSDictionary* suggestion in suggestions)
-	{
-		NSString* label = suggestion[@"label"];
-		NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:label action:@selector(lspInsertCompletion:) keyEquivalent:@""];
-		item.target = self;
-		item.representedObject = suggestion;
-		[menu addItem:item];
-	}
-
-	NSPoint caretPos = [self positionForWindowUnderCaret];
-	caretPos = [self convertPoint:[self.window convertRectFromScreen:(NSRect){ caretPos, NSZeroSize }].origin fromView:nil];
-	[menu popUpMenuPositioningItem:nil atLocation:caretPos inView:self];
-}
-
-- (void)lspInsertCompletion:(NSMenuItem*)sender
-{
-	NSDictionary* suggestion = sender.representedObject;
-	NSString* insertText = suggestion[@"insert"];
-	if(!insertText || !documentView)
-		return;
-
-	AUTO_REFRESH;
-
-	size_t caret = documentView->ranges().last().last.index;
-	text::pos_t pos = documentView->convert(caret);
-	size_t bol = documentView->begin(pos.line);
-	std::string lineText = documentView->substr(bol, caret);
-	size_t prefixStart = lineText.size();
-	while(prefixStart > 0 && (isalnum(lineText[prefixStart-1]) || lineText[prefixStart-1] == '_'))
-		--prefixStart;
-	size_t prefixLen = lineText.size() - prefixStart;
-
-	size_t from = caret - prefixLen;
-	documentView->set_ranges(ng::range_t(from, caret));
-	documentView->insert(to_s(insertText));
-}
-#endif
 
 // =============
 // = Insertion =
@@ -4986,7 +4923,6 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	return NO;
 }
 
-#if HAVE_OAK_SWIFTUI
 // ===================================
 // = OakCompletionPopupDelegate =
 // ===================================
@@ -5011,5 +4947,4 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 {
 	_lspFilterPrefix = nil;
 }
-#endif
 @end
