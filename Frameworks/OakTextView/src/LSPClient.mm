@@ -42,6 +42,13 @@ using json = nlohmann::json;
 		_task.standardError      = _stderrPipe;
 		_task.currentDirectoryURL = [NSURL fileURLWithPath:workingDirectory];
 
+		// Inherit current environment and ensure homebrew paths are available
+		NSMutableDictionary* env = [NSProcessInfo.processInfo.environment mutableCopy];
+		NSString* path = env[@"PATH"] ?: @"/usr/bin:/bin";
+		if(![path containsString:@"/opt/homebrew/bin"])
+			env[@"PATH"] = [@"/opt/homebrew/bin:/opt/homebrew/sbin:" stringByAppendingString:path];
+		_task.environment = env;
+
 		_task.terminationHandler = ^(NSTask* task){
 			NSLog(@"[LSP] Server terminated with status %d", task.terminationStatus);
 		};
