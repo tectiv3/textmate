@@ -143,7 +143,6 @@ add_subdirectory(Applications/pretty_plist)
 add_subdirectory(Applications/tm_query)
 add_subdirectory(Applications/PrivilegedTool)
 add_subdirectory(Applications/QuickLookGenerator)
-add_subdirectory(Applications/SyntaxMate)
 add_subdirectory(Applications/NewApplication)
 add_subdirectory(Applications/TextMate)
 
