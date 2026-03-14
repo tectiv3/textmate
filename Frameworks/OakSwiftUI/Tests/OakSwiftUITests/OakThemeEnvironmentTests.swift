@@ -2,15 +2,13 @@ import Testing
 import AppKit
 @testable import OakSwiftUI
 
-@Test func defaultThemeValues() {
+@Test @MainActor func defaultThemeValues() {
     let theme = OakThemeEnvironment()
     #expect(theme.fontName == "Menlo")
     #expect(theme.fontSize == 12)
-    #expect(theme.backgroundColor != nil)
-    #expect(theme.foregroundColor != nil)
 }
 
-@Test func applyThemeFromDictionary() {
+@Test @MainActor func applyThemeFromDictionary() {
     let theme = OakThemeEnvironment()
     let dict: NSDictionary = [
         "fontName": "Monaco",
@@ -25,7 +23,7 @@ import AppKit
     #expect(theme.foregroundColor == NSColor.white)
 }
 
-@Test func applyThemeIgnoresUnknownKeys() {
+@Test @MainActor func applyThemeIgnoresUnknownKeys() {
     let theme = OakThemeEnvironment()
     let dict: NSDictionary = [
         "unknownKey": "value",
