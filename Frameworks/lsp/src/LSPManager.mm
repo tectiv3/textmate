@@ -59,6 +59,51 @@ static NSString* languageIdForScope (NSString* fileType)
 	return @"plaintext";
 }
 
+static NSString* languageIdForExtension (NSString* ext)
+{
+	if(!ext.length)
+		return @"plaintext";
+
+	static NSDictionary* map = @{
+		@"php"  : @"php",
+		@"c"    : @"c",
+		@"h"    : @"c",
+		@"cc"   : @"cpp",
+		@"cpp"  : @"cpp",
+		@"cxx"  : @"cpp",
+		@"hpp"  : @"cpp",
+		@"m"    : @"objective-c",
+		@"mm"   : @"objective-cpp",
+		@"js"   : @"javascript",
+		@"jsx"  : @"javascript",
+		@"ts"   : @"typescript",
+		@"tsx"  : @"typescript",
+		@"py"   : @"python",
+		@"go"   : @"go",
+		@"rs"   : @"rust",
+		@"rb"   : @"ruby",
+		@"java" : @"java",
+		@"json" : @"json",
+		@"css"  : @"css",
+		@"html" : @"html",
+		@"htm"  : @"html",
+		@"sh"   : @"shellscript",
+		@"bash" : @"shellscript",
+		@"zsh"  : @"shellscript",
+		@"yaml" : @"yaml",
+		@"yml"  : @"yaml",
+		@"xml"  : @"xml",
+		@"sql"  : @"sql",
+		@"lua"  : @"lua",
+		@"swift": @"swift",
+		@"md"   : @"markdown",
+		@"vue"  : @"vue",
+	};
+
+	NSString* langId = map[ext.lowercaseString];
+	return langId ?: ext.lowercaseString;
+}
+
 static std::vector<std::string> const& workspaceMarkers ()
 {
 	static std::vector<std::string> const markers = {
@@ -190,6 +235,8 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	_documentVersions[docId] = @1;
 
 	NSString* langId = languageIdForScope(document.fileType);
+	if([langId isEqualToString:@"plaintext"] && document.path)
+		langId = languageIdForExtension(document.path.pathExtension);
 	[client openDocument:document languageId:langId];
 }
 
@@ -293,9 +340,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	{
 		NSNumber* severity = diag[@"severity"];
 		NSString* message  = diag[@"message"];
-		NSDictionary* range = diag[@"range"];
-		NSDictionary* start = range[@"start"];
-		NSNumber* line = start[@"line"];
+		NSNumber* line     = diag[@"line"];
 
 		if(!message || !line)
 			continue;

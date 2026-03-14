@@ -207,7 +207,7 @@ using json = nlohmann::json;
 		if(msg.contains("id"))
 		{
 			// Server-initiated request — must reply or server will hang
-			NSLog(@"[LSP] <-- request: %s (id=%d)", method.c_str(), msg["id"].get<int>());
+			NSLog(@"[LSP] <-- request: %s (id=%s)", method.c_str(), msg["id"].dump().c_str());
 			json response = {
 				{"jsonrpc", "2.0"},
 				{"id",      msg["id"]},
@@ -221,7 +221,7 @@ using json = nlohmann::json;
 		}
 		else
 		{
-			NSLog(@"[LSP] <-- notification: %s", method.c_str());
+			NSLog(@"[LSP] <-- notification: %s %s", method.c_str(), msg.contains("params") ? msg["params"].dump().c_str() : "");
 		}
 	}
 	else if(msg.contains("id"))
