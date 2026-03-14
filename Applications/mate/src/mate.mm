@@ -7,7 +7,7 @@
 #include <io/path.h>
 #include <plist/uuid.h>
 
-static char const* const AppVersion = "2.13.3";
+static char const* const AppVersion = TEXTMATE_VERSION_STRING;
 
 static char const* socket_path ()
 {

@@ -45,7 +45,11 @@ endif()
 
 # Info.plist variable expansion
 set(TARGET_NAME "TextMate")
-set(BUNDLE_IDENTIFIER "com.macromates.TextMate-dev")
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(BUNDLE_IDENTIFIER "com.macromates.TextMate")
+else()
+  set(BUNDLE_IDENTIFIER "com.macromates.TextMate-dev")
+endif()
 set(APP_MIN_OS "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 set(APP_VERSION "${TEXTMATE_VERSION}")
 string(TIMESTAMP YEAR "%Y")

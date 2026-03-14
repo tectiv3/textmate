@@ -48,7 +48,22 @@ add_link_options(-fobjc-link-runtime -ObjC)
 
 # Dependencies — none required (all external deps removed)
 
-set(TEXTMATE_VERSION "2.0.23")
+# Derive version from git tags (e.g. v3.0 → "3.0", v3.0-5-gabcdef → "3.0.5")
+execute_process(
+  COMMAND git describe --tags --match "v*"
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  OUTPUT_VARIABLE _git_describe
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE _git_result
+)
+if(_git_result EQUAL 0 AND _git_describe MATCHES "^v([0-9]+\\.[0-9]+[0-9.]*)(-([0-9]+))?")
+  set(TEXTMATE_VERSION "${CMAKE_MATCH_1}")
+  if(CMAKE_MATCH_3)
+    string(APPEND TEXTMATE_VERSION ".${CMAKE_MATCH_3}")
+  endif()
+else()
+  set(TEXTMATE_VERSION "2.5")
+endif()
 
 # Shared includes
 include_directories(Shared/include)
