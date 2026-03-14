@@ -1,8 +1,8 @@
-#ifndef NETWORK_TBZ_H_NEU56OWR
-#define NETWORK_TBZ_H_NEU56OWR
+#ifndef IO_TBZ_H_NEU56OWR
+#define IO_TBZ_H_NEU56OWR
 
 #include <io/exec.h>
-namespace network
+namespace io
 {
 	struct tbz_t
 	{
@@ -21,6 +21,6 @@ namespace network
 		int _status;
 	};
 
-} /* network */
+} /* io */
 
-#endif /* end of include guard: NETWORK_TBZ_H_NEU56OWR */
+#endif /* end of include guard: IO_TBZ_H_NEU56OWR */

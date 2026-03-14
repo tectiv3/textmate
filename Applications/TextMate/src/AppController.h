@@ -24,7 +24,6 @@
 
 - (IBAction)showBundleItemChooser:(id)sender;
 
-- (IBAction)performSoftwareUpdateCheck:(id)sender;
 - (IBAction)showPreferences:(id)sender;
 - (IBAction)showBundleEditor:(id)sender;
 

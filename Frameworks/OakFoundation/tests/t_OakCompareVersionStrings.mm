@@ -1,4 +1,4 @@
-#import <SoftwareUpdate/SoftwareUpdate.h>
+#import <OakFoundation/OakCompareVersionStrings.h>
 
 std::string to_s (NSComparisonResult result)
 {

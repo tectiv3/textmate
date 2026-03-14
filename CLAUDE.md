@@ -7,8 +7,8 @@ TextMate is a macOS-native text editor written in **Objective-C++**. Low-level d
 ## Repository Structure
 
 ```
-Applications/   - 10 apps (TextMate, mate, commit, gtm, indent, etc.)
-Frameworks/     - 45 self-contained frameworks (core logic + GUI)
+Applications/   - 9 apps (TextMate, mate, commit, gtm, indent, etc.)
+Frameworks/     - 42 self-contained frameworks (core logic + GUI)
 PlugIns/        - Plugin system (dialog, dialog-1.x) — incorporated into repo
 Shared/         - Shared PCH headers, oak utility includes
 vendor/         - External deps (Onigmo, kvdb)
@@ -37,8 +37,6 @@ ninja, cmake
 ### Build Quirks
 
 - `-ObjC` linker flag required to load ObjC categories from static libraries
-- `network` framework include path is PRIVATE to avoid case-insensitive collision with Apple's Network.framework
-- `Frameworks/updater` and `Applications/bl` disabled (not needed, avoids network collision)
 - OakDebug linked unconditionally (symbols used in all build configs)
 - Plugin `.tmplugin` bundles need ad-hoc codesigning before embedding in app
 - gen_test runner inlines test source bodies — don't compile test files separately
@@ -72,7 +70,6 @@ ninja, cmake
 - **theme/** - Theme loading
 - **file/** - File I/O
 - **io/** - I/O abstractions
-- **network/** - Networking
 - **undo/** - Undo/redo stack
 
 ### Entry Point

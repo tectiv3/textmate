@@ -4,7 +4,7 @@
 #import <OakAppKit/NSImage Additions.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakFoundation/OakStringListTransformer.h>
-#import <SoftwareUpdate/SoftwareUpdate.h> // OakCompareVersionStrings()
+#import <OakFoundation/OakCompareVersionStrings.h>
 #import <io/path.h>
 #import <io/exec.h>
 #import <ns/ns.h>

@@ -6,17 +6,12 @@ target_sources(TextMate PRIVATE ${_src})
 target_link_libraries(TextMate PRIVATE
   BundleEditor BundleMenu BundlesManager CommitWindow CrashReporter DocumentWindow
   Find HTMLOutputWindow MenuBuilder OakAppKit OakCommand OakFilterList OakFoundation
-  OakSystem OakTextView Preferences SoftwareUpdate authorization bundles cf command
-  crash document io kvdb license network ns plist regexp scm settings text theme
+  OakSystem OakTextView Preferences authorization bundles cf command
+  crash document io kvdb license ns plist regexp scm settings text theme
   ${TEXTMATE_DEBUG_LIBS}
 )
 
 target_link_libraries(TextMate PRIVATE "-framework Cocoa" "-framework UniformTypeIdentifiers")
-
-# network headers need special handling — can't use <network/...> include
-# path because it shadows Apple's Network.framework on case-insensitive macOS
-target_include_directories(TextMate PRIVATE
-  "${CMAKE_SOURCE_DIR}/Frameworks/network/src")
 
 # Info.plist variable expansion
 set(TARGET_NAME "TextMate")
@@ -79,7 +74,6 @@ file(GLOB _fw_res
   "${CMAKE_SOURCE_DIR}/Frameworks/OakTabBarView/gfx/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/FileBrowser/resources/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/DocumentWindow/resources/*.png"
-  "${CMAKE_SOURCE_DIR}/Frameworks/SoftwareUpdate/resources/*.tiff"
   "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.html"
   "${CMAKE_SOURCE_DIR}/Frameworks/scm/resources/*.xslt"
 )

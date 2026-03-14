@@ -106,8 +106,6 @@ add_subdirectory(Frameworks/theme)
 
 # === Services ===
 add_subdirectory(Frameworks/scm)
-add_subdirectory(Frameworks/network)
-# add_subdirectory(Frameworks/updater)  # disabled — not needed
 add_subdirectory(Frameworks/file)
 add_subdirectory(Frameworks/command)
 add_subdirectory(Frameworks/layout)
@@ -116,7 +114,6 @@ add_subdirectory(Frameworks/license)
 # === GUI frameworks ===
 add_subdirectory(Frameworks/OakAppKit)
 add_subdirectory(Frameworks/TMFileReference)
-add_subdirectory(Frameworks/SoftwareUpdate)
 add_subdirectory(Frameworks/Preferences)
 add_subdirectory(Frameworks/OakTabBarView)
 add_subdirectory(Frameworks/OakFilterList)
@@ -136,7 +133,6 @@ add_subdirectory(Frameworks/CommitWindow)
 
 # === Applications ===
 add_subdirectory(Applications/mate)
-# add_subdirectory(Applications/bl)  # disabled — depends on updater
 add_subdirectory(Applications/gtm)
 add_subdirectory(Applications/indent)
 add_subdirectory(Applications/pretty_plist)

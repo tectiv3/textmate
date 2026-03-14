@@ -2,7 +2,7 @@
 #include <text/format.h>
 #include <text/trim.h>
 
-namespace network
+namespace io
 {
 	tbz_t::tbz_t (std::string const& dest)
 	{
@@ -44,9 +44,9 @@ namespace network
 		if(output)
 			output->swap(_output);
 		if(error)
-			output->swap(_error);
+			error->swap(_error);
 
 		return WIFEXITED(_status) && WEXITSTATUS(_status) == 0;
 	}
 
-} /* network */
+} /* io */
