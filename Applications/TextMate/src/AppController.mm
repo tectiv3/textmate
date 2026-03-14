@@ -1,3 +1,4 @@
+#import "LSPBridge.h"
 #import "AppController.h"
 #import "OakMainMenu.h"
 #import "Favorites.h"
@@ -603,6 +604,12 @@ BOOL HasDocumentWindow (NSArray* windows)
 	[AboutWindowController showChangesIfUpdated];
 
 	[OakCommitWindowServer sharedInstance]; // Setup server
+
+	[LSPBridge setup];
+	NSMenu* viewMenu = [[[NSApp mainMenu] itemWithTitle:@"View"] submenu];
+	[viewMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* debugItem = [viewMenu addItemWithTitle:@"LSP Debug Panel" action:@selector(toggleLogPanel) keyEquivalent:@""];
+	[debugItem setTarget:[LSPBridge class]];
 
 	self.didFinishLaunching = YES;
 }

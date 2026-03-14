@@ -18,6 +18,9 @@ if(OakSwiftUI_LIB)
   target_link_libraries(TextMate PRIVATE ${OakSwiftUI_LIB})
   target_compile_definitions(TextMate PRIVATE HAVE_OAK_SWIFTUI=1)
 
+  # Include path for generated Swift header
+  target_include_directories(TextMate PRIVATE "${CMAKE_SOURCE_DIR}/Frameworks/OakSwiftUI/.build/arm64-apple-macosx/debug/OakSwiftUI.build/include")
+
   # Copy dylib into app bundle and set rpath
   add_custom_command(TARGET TextMate POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory

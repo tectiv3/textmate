@@ -11,6 +11,10 @@
 - (void)lspClientDidTerminate:(LSPClient*)client;
 @end
 
+extern NSString* const LSPLogNotification;
+extern NSString* const LSPShowMessageNotification;
+extern NSString* const LSPProgressNotification;
+
 @interface LSPClient : NSObject
 @property (nonatomic, weak) id<LSPClientDelegate> delegate;
 @property (nonatomic, readonly) BOOL initialized;

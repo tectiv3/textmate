@@ -4,6 +4,10 @@
 #import <ns/ns.h>
 #import <signal.h>
 
+NSString* const LSPLogNotification = @"LSPLogNotification";
+NSString* const LSPShowMessageNotification = @"LSPShowMessageNotification";
+NSString* const LSPProgressNotification = @"LSPProgressNotification";
+
 using json = nlohmann::json;
 
 @interface LSPClient ()
@@ -120,7 +124,7 @@ using json = nlohmann::json;
 	@try {
 		[_stdinPipe.fileHandleForWriting writeData:data];
 	} @catch(NSException* e) {
-		NSLog(@"[LSP] Write failed: %@", e.reason);
+		[self logLSP:@"Write failed: %@", e.reason];
 	}
 }
 
@@ -132,7 +136,7 @@ using json = nlohmann::json;
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	NSLog(@"[LSP] --> %s (id=%d)", method.UTF8String, _nextRequestId - 1);
+	[self logLSP:@"--> %s (id=%d)", method.UTF8String, _nextRequestId - 1];
 	[self sendMessage:msg];
 }
 
@@ -143,7 +147,7 @@ using json = nlohmann::json;
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	NSLog(@"[LSP] --> %s", method.UTF8String);
+	[self logLSP:@"--> %s", method.UTF8String];
 	[self sendMessage:msg];
 }
 
@@ -231,6 +235,70 @@ using json = nlohmann::json;
 
 // MARK: - Message dispatch
 
+- (void)logLSP:(NSString*)format, ... NS_FORMAT_FUNCTION(1,2)
+{
+	va_list args;
+	va_start(args, format);
+	NSString* message = [[NSString alloc] initWithFormat:format arguments:args];
+	va_end(args);
+
+	NSLog(@"[LSP] %@", message);
+	[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{@"message": message}];
+}
+
+- (void)handleShowMessage:(json const&)params
+{
+	int type = params["type"].get<int>();
+	std::string message = params["message"].get<std::string>();
+	
+	[[NSNotificationCenter defaultCenter] postNotificationName:LSPShowMessageNotification object:self userInfo:@{
+		@"type": @(type),
+		@"message": [NSString stringWithUTF8String:message.c_str()]
+	}];
+}
+
+- (void)handleLogMessage:(json const&)params
+{
+	int type = params["type"].get<int>();
+	std::string message = params["message"].get<std::string>();
+	
+	NSString* nsMessage = [NSString stringWithUTF8String:message.c_str()];
+	// Log directly to avoid double prefixing
+	NSLog(@"[LSP] [Server] %@", nsMessage);
+	[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{@"message": nsMessage, @"type": @(type), @"source": @"server"}];
+}
+
+- (void)handleProgress:(json const&)params
+{
+	id token = nil;
+	if(params.contains("token"))
+	{
+		if(params["token"].is_string())
+			token = [NSString stringWithUTF8String:params["token"].get<std::string>().c_str()];
+		else
+			token = @(params["token"].get<int>());
+	}
+	
+	if(!params.contains("value"))
+		return;
+		
+	auto const& value = params["value"];
+	std::string kind = value["kind"].get<std::string>();
+	
+	NSMutableDictionary* info = [NSMutableDictionary dictionary];
+	if(token) info[@"token"] = token;
+	info[@"kind"] = [NSString stringWithUTF8String:kind.c_str()];
+	
+	if(value.contains("title"))
+		info[@"title"] = [NSString stringWithUTF8String:value["title"].get<std::string>().c_str()];
+	if(value.contains("message"))
+		info[@"message"] = [NSString stringWithUTF8String:value["message"].get<std::string>().c_str()];
+	if(value.contains("percentage"))
+		info[@"percentage"] = @(value["percentage"].get<int>());
+		
+	[[NSNotificationCenter defaultCenter] postNotificationName:LSPProgressNotification object:self userInfo:info];
+}
+
 - (void)handleMessage:(json const&)msg
 {
 	if(msg.contains("method"))
@@ -240,7 +308,7 @@ using json = nlohmann::json;
 		if(msg.contains("id"))
 		{
 			// Server-initiated request — must reply or server will hang
-			NSLog(@"[LSP] <-- request: %s (id=%s)", method.c_str(), msg["id"].dump().c_str());
+			[self logLSP:@"<-- request: %s (id=%s)", method.c_str(), msg["id"].dump().c_str()];
 			json response = {
 				{"jsonrpc", "2.0"},
 				{"id",      msg["id"]},
@@ -252,20 +320,32 @@ using json = nlohmann::json;
 		{
 			[self handleDiagnostics:msg["params"]];
 		}
+		else if(method == "window/showMessage")
+		{
+			[self handleShowMessage:msg["params"]];
+		}
+		else if(method == "window/logMessage")
+		{
+			[self handleLogMessage:msg["params"]];
+		}
+		else if(method == "$/progress")
+		{
+			[self handleProgress:msg["params"]];
+		}
 		else
 		{
-			NSLog(@"[LSP] <-- notification: %s %s", method.c_str(), msg.contains("params") ? msg["params"].dump().c_str() : "");
+			[self logLSP:@"<-- notification: %s %s", method.c_str(), msg.contains("params") ? msg["params"].dump().c_str() : ""];
 		}
 	}
 	else if(msg.contains("id"))
 	{
 		int reqId = msg["id"].get<int>();
-		NSLog(@"[LSP] <-- response id=%d", reqId);
+		[self logLSP:@"<-- response id=%d", reqId];
 
 		if(msg.contains("error"))
 		{
 			auto const& err = msg["error"];
-			NSLog(@"[LSP] Error %d: %s", err["code"].get<int>(), err["message"].get<std::string>().c_str());
+			[self logLSP:@"Error %d: %s", err["code"].get<int>(), err["message"].get<std::string>().c_str()];
 
 			NSNumber* key = @(reqId);
 			void(^callback)(id) = _responseCallbacks[key];
@@ -278,7 +358,7 @@ using json = nlohmann::json;
 		else if(!_initialized && msg.contains("result"))
 		{
 			_initialized = YES;
-			NSLog(@"[LSP] Server initialized successfully");
+			[self logLSP:@"Server initialized successfully"];
 			[self sendNotification:@"initialized" params:json::object()];
 		}
 		else if(msg.contains("result"))
