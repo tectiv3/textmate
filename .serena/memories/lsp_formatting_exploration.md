@@ -106,3 +106,174 @@ Conversion needed:
 - **write.h:** Contains text insertion/deletion mechanisms
 - **editor.h:** Contains `perform_replacements()` and buffer manipulation
 - **indent.h:** Smart indentation available for use
+
+## Implementation Pattern Details
+
+### How LSP Actions are Currently Wired
+
+**Action Declaration Pattern (OakTextView.mm:4569):**
+```objc
+#define ACTION(NAME) (void)NAME:(id)sender { [self handleAction:ng::to_action(#NAME ":") forSelector:@selector(NAME:)]; }
+```
+
+**LSP-specific Actions** (not using ACTION macro, custom implementations):
+- `lspShowHoverInfo:(id)sender` (OakTextView.mm:5271)
+- `lspFindReferences:(id)sender` (OakTextView.mm:4798)
+
+**Pattern for LSP Actions:**
+1. Validate documentView exists
+2. Get caret position and convert to pos_t: `documentView->convert(caret)`
+3. Call LSPManager methods with callbacks
+4. Flush pending changes first: `[[LSPManager sharedManager] flushPendingChangesForDocument:doc]`
+5. Handle response (may be async, uses weak/strong self pattern)
+
+**Key Implementation Details:**
+- pos_t has: `size_t line, column, offset`
+- LSP uses: `line` and `character` (same as column)
+- Buffer conversion: `text::pos_t pos = documentView->convert(index.index);`
+
+### How TextEdits Would Be Applied
+
+**Path to text modification:**
+1. LSPClient receives formatting response with TextEdit[]
+2. LSPManager routes to OakTextView
+3. OakTextView action method (e.g., `lspFormatDocument:`) processes TextEdits:
+   ```objc
+   NSArray* textEdits = result[@"textEdits"] // or result if response is TextEdit[]
+   std::multimap<std::pair<size_t, size_t>, std::string> replacements;
+   for(NSDictionary* edit in textEdits) {
+       // Convert LSP range to buffer offsets
+       NSDictionary* range = edit[@"range"];
+       text::pos_t start(startLine, startChar);
+       text::pos_t end(endLine, endChar);
+       size_t from = documentView->convert(start);
+       size_t to = documentView->convert(end);
+       std::string newText = to_s(edit[@"newText"]);
+       replacements.insert({{from, to}, newText});
+   }
+   [document performReplacements:replacements checksum:0];
+   ```
+
+4. `OakDocument::performReplacements:checksum:` calls `OakDocumentEditor::performReplacements:`
+5. Which calls `editor_t::perform_replacements()` wrapped in undo grouping
+
+### Object Model for Formatting Requests
+
+**LSPClient additions needed:**
+```objc
+- (int)requestFormattingForURI:(NSString*)uri 
+                      options:(NSDictionary*)options 
+                   completion:(void(^)(NSArray<NSDictionary*>*))callback;
+
+- (int)requestRangeFormattingForURI:(NSString*)uri 
+                              range:(NSDictionary*)range  // {start: {line, character}, end: {line, character}}
+                            options:(NSDictionary*)options 
+                         completion:(void(^)(NSArray<NSDictionary*>*))callback;
+
+- (int)requestOnTypeFormattingForURI:(NSString*)uri 
+                                line:(NSUInteger)line 
+                           character:(NSUInteger)character 
+                                  ch:(NSString*)ch 
+                             options:(NSDictionary*)options 
+                          completion:(void(^)(NSArray<NSDictionary*>*))callback;
+```
+
+**LSPManager additions needed:**
+```objc
+- (int)requestFormattingForDocument:(OakDocument*)document 
+                          completion:(void(^)(NSArray<NSDictionary*>*))callback;
+
+- (int)requestRangeFormattingForDocument:(OakDocument*)document 
+                                   range:(text::range_t)range 
+                             completion:(void(^)(NSArray<NSDictionary*>*))callback;
+
+- (int)requestOnTypeFormattingForDocument:(OakDocument*)document 
+                                     line:(NSUInteger)line 
+                                character:(NSUInteger)character 
+                                       ch:(NSString*)ch 
+                              completion:(void(^)(NSArray<NSDictionary*>*))callback;
+```
+
+**OakTextView.mm additions needed:**
+```objc
+- (void)lspFormatDocument:(id)sender;      // Ctrl-K Ctrl-F or similar
+- (void)lspFormatSelection:(id)sender;     // Format selected range
+- (void)lspFormatOnType;                   // Called after character insertion
+```
+
+### Capabilities Declaration
+
+Current capabilities in `sendInitialize()` (LSPClient.mm:327-359):
+- None for formatting. Need to add:
+```cpp
+{"textDocument", {
+    ...existing capabilities...,
+    {"formatting", {
+        {"dynamicRegistration", false}
+    }},
+    {"rangeFormatting", {
+        {"dynamicRegistration", false}
+    }},
+    {"onTypeFormatting", {
+        {"dynamicRegistration", false}
+    }}
+}}
+```
+
+## Key Classes and Methods for Implementation
+
+### document_view_t (OakTextView.mm:238)
+Local struct inside OakTextView.mm that wraps OakDocumentEditor. Key methods:
+- `convert(text::pos_t)` → `size_t` offset
+- `convert(size_t)` → `text::pos_t`
+- `substr(from, to)` → buffer content
+- Access to `_editor`, `_layout`, `_document` 
+- Holds `_document_editor` (OakDocumentEditor*)
+
+The documentView is a `std::shared_ptr<document_view_t>` (line 468)
+
+### Object Access Chain
+1. OakTextView has `documentView` (shared_ptr<document_view_t>)
+2. documentView has `_document_editor` (OakDocumentEditor*)
+3. OakDocumentEditor has `_editor` (ng::editor_t*)
+4. ng::editor_t has `perform_replacements(multimap<pair<size_t,size_t>, string>)`
+
+### Document Access
+1. OakTextView.document → OakDocument*
+2. OakDocument has:
+   - `.path` (NSString*)
+   - `.fileType` (NSString*)
+   - `.tabSize` (NSUInteger)
+   - `.softTabs` (BOOL)
+   - `.performReplacements:checksum:` → calls OakDocumentEditor
+
+### Critical Implementation Point
+To apply TextEdits from LSP formatting response:
+1. Parse TextEdit array from response
+2. For each TextEdit: convert LSP range to buffer offsets:
+   ```objc
+   text::pos_t start(lspLine, lspCharacter);
+   text::pos_t end(endLine, endCharacter);
+   size_t from = documentView->convert(start);
+   size_t to = documentView->convert(end);
+   replacements.insert({{from, to}, newText});
+   ```
+3. Call on document: `[document performReplacements:replacements checksum:0];`
+4. This triggers: OakDocument → OakDocumentEditor → ng::editor_t::perform_replacements()
+5. Wrapped in undo grouping for user convenience
+
+### Formatting Options Construction
+Can pass from document properties:
+```objc
+NSDictionary* options = @{
+    @"tabSize": @(document.tabSize),
+    @"insertSpaces": @(!document.softTabs),
+    @"trimTrailingWhitespace": @(YES),  // or from settings
+    @"insertFinalNewline": @(YES),
+};
+```
+
+### Key LSP Method Names
+- `textDocument/formatting` → full document format
+- `textDocument/rangeFormatting` → range format (requires range param)
+- `textDocument/onTypeFormatting` → format after char insertion

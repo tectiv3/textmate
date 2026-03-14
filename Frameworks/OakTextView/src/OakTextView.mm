@@ -5375,10 +5375,10 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 		return nil;
 
 	// Truncate huge content to avoid main thread freeze during rendering
-	// 1000 characters is plenty for a tooltip
-	if(value.length > 1000)
+	// 420 characters is plenty for a tooltip
+	if(value.length > 420)
 	{
-		value = [[value substringToIndex:1000] stringByAppendingString:@"\n... (truncated)"];
+		value = [[value substringToIndex:420] stringByAppendingString:@"\n... (truncated)"];
 	}
 
 	// Parse hover content — extract title (signature) and body (docs)
