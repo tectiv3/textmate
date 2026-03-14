@@ -312,6 +312,9 @@ using json = nlohmann::json;
 					{"completionItem", {
 						{"snippetSupport", false}
 					}}
+				}},
+				{"definition", {
+					{"dynamicRegistration", false}
 				}}
 			}}
 		}}
@@ -512,6 +515,50 @@ using json = nlohmann::json;
 
 		if(callback)
 			callback(suggestions);
+	}];
+}
+
+- (void)requestDefinitionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}}
+	};
+
+	[self sendRequest:@"textDocument/definition" params:params callback:^(id result) {
+		NSMutableArray<NSDictionary*>* locations = [NSMutableArray new];
+
+		// Response can be Location, Location[], or null
+		NSArray* items = nil;
+		if([result isKindOfClass:[NSArray class]])
+			items = result;
+		else if([result isKindOfClass:[NSDictionary class]])
+			items = @[result];
+
+		for(NSDictionary* item in items)
+		{
+			NSString* locationUri = item[@"uri"];
+			NSDictionary* range = item[@"range"];
+			if(!locationUri || !range)
+				continue;
+
+			NSDictionary* start = range[@"start"];
+			[locations addObject:@{
+				@"uri":       locationUri,
+				@"line":      start[@"line"] ?: @0,
+				@"character": start[@"character"] ?: @0
+			}];
+		}
+
+		if(callback)
+			callback(locations);
 	}];
 }
 

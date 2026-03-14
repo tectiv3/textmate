@@ -4477,6 +4477,49 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 - ACTION(previousCompletion);
 
 // ==================
+// = LSP Go to Definition =
+// ========================
+
+- (void)lspGoToDefinition:(id)sender
+{
+	if(!documentView)
+		return;
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+
+	[[LSPManager sharedManager] requestDefinitionForDocument:doc
+		line:pos.line
+		character:pos.column
+		completion:^(NSArray<NSDictionary*>* locations) {
+			if(locations.count == 0)
+			{
+				NSLog(@"[LSP] No definition found");
+				return;
+			}
+
+			NSDictionary* loc = locations.firstObject;
+			NSString* uri = loc[@"uri"];
+			NSUInteger line = [loc[@"line"] unsignedIntegerValue];
+			NSUInteger character = [loc[@"character"] unsignedIntegerValue];
+
+			NSURL* url = [NSURL URLWithString:uri];
+			NSString* filePath = url.path;
+			if(!filePath)
+				return;
+
+			OakDocument* targetDoc = [OakDocumentController.sharedInstance documentWithPath:filePath];
+			text::range_t selection(text::pos_t(line, character));
+			[OakDocumentController.sharedInstance showDocument:targetDoc andSelect:selection inProject:nil bringToFront:YES];
+		}];
+}
+
 // = LSP Completion =
 // ==================
 
