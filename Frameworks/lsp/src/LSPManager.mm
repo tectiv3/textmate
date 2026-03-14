@@ -395,7 +395,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestDefinitionForURI:uri line:line character:character completion:callback];
 }
 
-- (void)requestHoverForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
+- (int)requestHoverForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
 {
 	NSUUID* docId = document.identifier;
 	LSPClient* client = _documentClients[docId];
@@ -403,7 +403,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	{
 		if(callback)
 			callback(nil);
-		return;
+		return 0;
 	}
 
 	NSString* path = document.path;
@@ -411,13 +411,48 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	{
 		if(callback)
 			callback(nil);
+		return 0;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	return [client requestHoverForURI:uri line:line character:character completion:callback];
+}
+
+- (void)cancelRequest:(int)requestId forDocument:(OakDocument*)document
+{
+	if(requestId == 0)
+		return;
+
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	[client cancelRequest:requestId];
+}
+
+- (void)requestReferencesForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(@[]);
 		return;
 	}
 
 	NSURL* fileURL = [NSURL fileURLWithPath:path];
 	NSString* uri = fileURL.absoluteString;
 
-	[client requestHoverForURI:uri line:line character:character completion:callback];
+	[client requestReferencesForURI:uri line:line character:character completion:callback];
 }
 
 - (BOOL)hasClientForDocument:(OakDocument*)document

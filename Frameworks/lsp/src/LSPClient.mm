@@ -476,6 +476,14 @@ using json = nlohmann::json;
 	return reqId;
 }
 
+- (void)cancelRequest:(int)requestId
+{
+	[_responseCallbacks removeObjectForKey:@(requestId)];
+
+	json params = {{"id", requestId}};
+	[self sendNotification:@"$/cancelRequest" params:params];
+}
+
 - (id)convertJSON:(json const&)value
 {
 	if(value.is_null())
@@ -616,13 +624,13 @@ using json = nlohmann::json;
 	}];
 }
 
-- (void)requestHoverForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
+- (int)requestHoverForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
 {
 	if(!_initialized)
 	{
 		if(callback)
 			callback(nil);
-		return;
+		return 0;
 	}
 
 	json params = {
@@ -630,7 +638,7 @@ using json = nlohmann::json;
 		{"position", {{"line", (int)line}, {"character", (int)character}}}
 	};
 
-	[self sendRequest:@"textDocument/hover" params:params callback:^(id result) {
+	return [self sendRequest:@"textDocument/hover" params:params callback:^(id result) {
 		if(![result isKindOfClass:[NSDictionary class]])
 		{
 			if(callback)
@@ -721,6 +729,50 @@ using json = nlohmann::json;
 
 		if(callback)
 			callback(hover);
+	}];
+}
+
+- (void)requestReferencesForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}},
+		{"context", {{"includeDeclaration", true}}}
+	};
+
+	[self sendRequest:@"textDocument/references" params:params callback:^(id result) {
+		NSMutableArray<NSDictionary*>* locations = [NSMutableArray new];
+
+		NSArray* items = nil;
+		if([result isKindOfClass:[NSArray class]])
+			items = result;
+		else if([result isKindOfClass:[NSDictionary class]])
+			items = @[result];
+
+		for(NSDictionary* item in items)
+		{
+			NSString* locationUri = item[@"uri"];
+			NSDictionary* range = item[@"range"];
+			if(!locationUri || !range)
+				continue;
+
+			NSDictionary* start = range[@"start"];
+			[locations addObject:@{
+				@"uri":       locationUri,
+				@"line":      start[@"line"] ?: @0,
+				@"character": start[@"character"] ?: @0
+			}];
+		}
+
+		if(callback)
+			callback(locations);
 	}];
 }
 

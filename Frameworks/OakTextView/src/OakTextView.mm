@@ -522,6 +522,12 @@ private:
 	// = LSP Hover =
 
 	OakInfoTooltip* _lspHoverTooltip;
+	int _lspHoverRequestId;
+	NSMutableDictionary* _lspHoverCache;
+
+	// = LSP References =
+
+	OakReferencesPanel* _lspReferencesPanel;
 	NSTimer* _lspHoverTimer;
 	ng::index_t _lspHoverIndex;
 
@@ -864,6 +870,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 - (void)setDocument:(OakDocument*)aDocument
 {
 	_definitionHighlightRange = ng::range_t();
+	_lspHoverCache = nil;
 
 	if(aDocument && [_document isEqual:aDocument])
 	{
@@ -1034,7 +1041,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 {
 	[NSNotificationCenter.defaultCenter removeObserver:self];
 	[self unbind:@"scmStatus"];
-	[self cancelLSPHoverTimer];
+	[self cancelLSPHoverRequest];
 	[_lspHoverTooltip dismiss];
 	[self setDocument:nil];
 }
@@ -2252,7 +2259,7 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 	AUTO_REFRESH;
 
 	// Dismiss hover tooltip on any keystroke
-	[self cancelLSPHoverTimer];
+	[self cancelLSPHoverRequest];
 	[_lspHoverTooltip dismiss];
 
 	if([_lspCompletionPopup isVisible])
@@ -4065,7 +4072,7 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		}
 
 		// Dismiss hover tooltip when entering Cmd mode
-		[self cancelLSPHoverTimer];
+		[self cancelLSPHoverRequest];
 		return;
 	}
 
@@ -4075,7 +4082,7 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		if(index != _lspHoverIndex)
 		{
 			_lspHoverIndex = index;
-			[self cancelLSPHoverTimer];
+			[self cancelLSPHoverRequest];
 
 			// Dismiss existing tooltip when moving to a new position
 			[_lspHoverTooltip dismiss];
@@ -4167,6 +4174,32 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 					}
 
 					NSDictionary* loc = locations.firstObject;
+					if(locations.count > 1)
+					{
+						for(NSDictionary* l in locations)
+						{
+							NSString* uri = l[@"uri"];
+							NSString* currentUri = loc[@"uri"];
+
+							BOOL newIsHelper = [uri containsString:@"_ide_helper"];
+							BOOL curIsHelper = [currentUri containsString:@"_ide_helper"];
+
+							if(curIsHelper && !newIsHelper)
+							{
+								loc = l;
+								continue;
+							}
+
+							if(!curIsHelper && !newIsHelper)
+							{
+								BOOL newIsVendor = [uri containsString:@"vendor/"];
+								BOOL curIsVendor = [currentUri containsString:@"vendor/"];
+								if(curIsVendor && !newIsVendor)
+									loc = l;
+							}
+						}
+					}
+
 					NSString* uri = loc[@"uri"];
 					NSUInteger line = [loc[@"line"] unsignedIntegerValue];
 					NSUInteger character = [loc[@"character"] unsignedIntegerValue];
@@ -4712,6 +4745,32 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 			}
 
 			NSDictionary* loc = locations.firstObject;
+			if(locations.count > 1)
+			{
+				for(NSDictionary* l in locations)
+				{
+					NSString* uri = l[@"uri"];
+					NSString* currentUri = loc[@"uri"];
+
+					BOOL newIsHelper = [uri containsString:@"_ide_helper"];
+					BOOL curIsHelper = [currentUri containsString:@"_ide_helper"];
+
+					if(curIsHelper && !newIsHelper)
+					{
+						loc = l;
+						continue;
+					}
+
+					if(!curIsHelper && !newIsHelper)
+					{
+						BOOL newIsVendor = [uri containsString:@"vendor/"];
+						BOOL curIsVendor = [currentUri containsString:@"vendor/"];
+						if(curIsVendor && !newIsVendor)
+							loc = l;
+					}
+				}
+			}
+
 			NSString* uri = loc[@"uri"];
 			NSUInteger line = [loc[@"line"] unsignedIntegerValue];
 			NSUInteger character = [loc[@"character"] unsignedIntegerValue];
@@ -4725,6 +4784,140 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 			text::range_t selection(text::pos_t(line, character));
 			[OakDocumentController.sharedInstance showDocument:targetDoc andSelect:selection inProject:nil bringToFront:YES];
 		}];
+}
+
+// = LSP References =
+// ==================
+
+- (void)lspFindReferences:(id)sender
+{
+	if(!documentView)
+		return;
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	// Extract symbol name at caret for panel title
+	std::string const buf = documentView->substr();
+	size_t wordStart = caret, wordEnd = caret;
+	while(wordStart > 0 && (isalnum(buf[wordStart - 1]) || buf[wordStart - 1] == '_'))
+		--wordStart;
+	while(wordEnd < buf.size() && (isalnum(buf[wordEnd]) || buf[wordEnd] == '_'))
+		++wordEnd;
+	NSString* symbolName = to_ns(buf.substr(wordStart, wordEnd - wordStart));
+
+	NSString* docPath = doc.path;
+	NSString* baseDir = docPath ? [docPath stringByDeletingLastPathComponent] : nil;
+
+	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+
+	[[LSPManager sharedManager] requestReferencesForDocument:doc
+		line:pos.line
+		character:pos.column
+		completion:^(NSArray<NSDictionary*>* locations) {
+			if(locations.count == 0)
+			{
+				NSBeep();
+				return;
+			}
+
+			if(locations.count == 1)
+			{
+				NSDictionary* loc = locations.firstObject;
+				NSString* uri = loc[@"uri"];
+				NSUInteger line = [loc[@"line"] unsignedIntegerValue];
+				NSUInteger character = [loc[@"character"] unsignedIntegerValue];
+
+				NSURL* url = [NSURL URLWithString:uri];
+				NSString* filePath = url.path;
+				if(!filePath)
+					return;
+
+				OakDocument* targetDoc = [OakDocumentController.sharedInstance documentWithPath:filePath];
+				text::range_t selection(text::pos_t(line, character));
+				[OakDocumentController.sharedInstance showDocument:targetDoc andSelect:selection inProject:nil bringToFront:YES];
+				return;
+			}
+
+			// Multiple results — build reference items and show panel
+			NSMutableArray<OakReferenceItem*>* items = [NSMutableArray arrayWithCapacity:locations.count];
+			NSMutableDictionary<NSString*, NSArray<NSString*>*>* fileLines = [NSMutableDictionary new];
+
+			for(NSDictionary* loc in locations)
+			{
+				NSString* uri = loc[@"uri"];
+				NSURL* url = [NSURL URLWithString:uri];
+				NSString* filePath = url.path;
+				if(!filePath)
+					continue;
+
+				NSUInteger line = [loc[@"line"] unsignedIntegerValue];
+				NSUInteger character = [loc[@"character"] unsignedIntegerValue];
+
+				// Compute display path relative to base directory
+				NSString* displayPath = filePath;
+				if(baseDir && [filePath hasPrefix:baseDir])
+					displayPath = [filePath substringFromIndex:baseDir.length + 1];
+
+				// Load file lines (cached per file)
+				NSArray<NSString*>* lines = fileLines[filePath];
+				if(!lines)
+				{
+					NSString* fileContent = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+					lines = fileContent ? [fileContent componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]] : @[];
+					fileLines[filePath] = lines;
+				}
+
+				NSString* lineContent = @"";
+				if(line < lines.count)
+				{
+					lineContent = [lines[line] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+				}
+
+				OakReferenceItem* item = [[OakReferenceItem alloc]
+					initWithFilePath:filePath
+					     displayPath:displayPath
+					            line:line
+					          column:character
+					         content:lineContent];
+				[items addObject:item];
+			}
+
+			if(!_lspReferencesPanel)
+			{
+				if(!_lspTheme)
+				{
+					_lspTheme = [[OakThemeEnvironment alloc] init];
+					NSFont* f = self.font ?: [NSFont userFixedPitchFontOfSize:12];
+					[_lspTheme applyTheme:@{
+						@"fontName": f.fontName,
+						@"fontSize": @(f.pointSize),
+						@"backgroundColor": [NSColor textBackgroundColor],
+						@"foregroundColor": [NSColor textColor],
+					}];
+				}
+				_lspReferencesPanel = [[OakReferencesPanel alloc] initWithTheme:_lspTheme];
+				_lspReferencesPanel.delegate = (id<OakReferencesPanelDelegate>)self;
+			}
+
+			[_lspReferencesPanel showIn:self items:items symbol:symbolName ?: @"symbol"];
+		}];
+}
+
+- (void)referencesPanel:(OakReferencesPanel*)panel didSelectItem:(OakReferenceItem*)item
+{
+	OakDocument* targetDoc = [OakDocumentController.sharedInstance documentWithPath:item.filePath];
+	text::range_t selection(text::pos_t(item.line, item.column));
+	[OakDocumentController.sharedInstance showDocument:targetDoc andSelect:selection inProject:nil bringToFront:YES];
+}
+
+- (void)referencesPanelDidClose:(OakReferencesPanel*)panel
+{
+	// No cleanup needed — panel can be reused
 }
 
 // = LSP Completion =
@@ -5090,16 +5283,35 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	text::pos_t pos = documentView->convert(index.index);
 
+	// Check cache: keyed by "line:column"
+	NSString* cacheKey = [NSString stringWithFormat:@"%zu:%zu", pos.line, pos.column];
+	if(_lspHoverCache)
+	{
+		NSDictionary* cached = _lspHoverCache[cacheKey];
+		if(cached)
+		{
+			[self showLSPHoverTooltipWithContent:cached atIndex:index];
+			return;
+		}
+	}
+
 	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
 
 	__weak OakTextView* weakSelf = self;
-	[[LSPManager sharedManager] requestHoverForDocument:doc
+	_lspHoverRequestId = [[LSPManager sharedManager] requestHoverForDocument:doc
 		line:pos.line
 		character:pos.column
 		completion:^(NSDictionary* hover) {
 			OakTextView* strongSelf = weakSelf;
 			if(!strongSelf || !hover)
 				return;
+
+			strongSelf->_lspHoverRequestId = 0;
+
+			// Cache the result
+			if(!strongSelf->_lspHoverCache)
+				strongSelf->_lspHoverCache = [NSMutableDictionary new];
+			strongSelf->_lspHoverCache[cacheKey] = hover;
 
 			[strongSelf showLSPHoverTooltipWithContent:hover atIndex:index];
 		}];
@@ -5134,7 +5346,7 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 		// Skip lines that are just the symbol name in markdown bold/italic
 		// __ctype_alnum__ (bold) or _App\WalletPass::isApproved_ (italic FQN)
-		NSRegularExpression* symbolNameRegex = [NSRegularExpression regularExpressionWithPattern:@"^_{1,2}[a-zA-Z_\\\\][a-zA-Z0-9_:\\\\]*_{1,2}$" options:0 error:nil];
+		static NSRegularExpression* symbolNameRegex = [NSRegularExpression regularExpressionWithPattern:@"^_{1,2}[a-zA-Z_\\\\][a-zA-Z0-9_:\\\\]*_{1,2}$" options:0 error:nil];
 		if([symbolNameRegex numberOfMatchesInString:line options:0 range:NSMakeRange(0, line.length)] > 0)
 			continue;
 
@@ -5172,7 +5384,7 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	[cleaned replaceOccurrencesOfString:@"<i>" withString:@"*" options:0 range:NSMakeRange(0, cleaned.length)];
 	[cleaned replaceOccurrencesOfString:@"</i>" withString:@"*" options:0 range:NSMakeRange(0, cleaned.length)];
 	// Strip remaining HTML tags (<p>, </p>, <br>, etc.)
-	NSRegularExpression* htmlTagRegex = [NSRegularExpression regularExpressionWithPattern:@"<[^>]+>" options:0 error:nil];
+	static NSRegularExpression* htmlTagRegex = [NSRegularExpression regularExpressionWithPattern:@"<[^>]+>" options:0 error:nil];
 	cleaned = [[htmlTagRegex stringByReplacingMatchesInString:cleaned options:0 range:NSMakeRange(0, cleaned.length) withTemplate:@""] mutableCopy];
 
 	// Now parse inline markdown: `code`, **bold**, _italic_
@@ -5267,7 +5479,7 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	if(isMarkdown)
 	{
 		// Extract code blocks from markdown (```lang\n...\n```)
-		NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
+		static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
 		NSArray* codeMatches = [codeBlockRegex matchesInString:value options:0 range:NSMakeRange(0, value.length)];
 
 		NSString* bodyText = value;
@@ -5318,10 +5530,16 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	[_lspHoverTooltip showIn:self at:viewRect content:content];
 }
 
-- (void)cancelLSPHoverTimer
+- (void)cancelLSPHoverRequest
 {
 	[_lspHoverTimer invalidate];
 	_lspHoverTimer = nil;
+
+	if(_lspHoverRequestId != 0)
+	{
+		[[LSPManager sharedManager] cancelRequest:_lspHoverRequestId forDocument:self.document];
+		_lspHoverRequestId = 0;
+	}
 }
 
 - (void)infoTooltipDidDismiss:(OakInfoTooltip*)tooltip

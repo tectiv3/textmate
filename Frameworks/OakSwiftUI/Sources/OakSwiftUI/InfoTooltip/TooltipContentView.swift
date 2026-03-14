@@ -10,11 +10,15 @@ struct TooltipContentView: View {
                 Text(title)
                     .font(.system(size: theme.fontSize, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.primary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if content.body.length > 0 {
                 Text(AttributedString(content.body))
                     .font(.system(size: max(theme.fontSize - 1, 10)))
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let snippet = content.codeSnippet, !snippet.isEmpty {
