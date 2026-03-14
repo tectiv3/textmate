@@ -7,6 +7,7 @@ import AppKit
 	@objc public let detail: String
 	@objc public let kind: Int
 	@objc public var icon: NSImage?
+	@objc public var isSnippet: Bool = false
 
 	@objc public var effectiveInsertText: String {
 		insertText ?? label

@@ -352,6 +352,9 @@ BOOL HasDocumentWindow (NSArray* windows)
 				{ @"Unwrap Paragraph",                     @selector(unwrapText:)                       },
 				{ /* -------- */ },
 				{ @"Filter Through Command…",              @selector(orderFrontRunCommandWindow:), @"|" },
+				{ /* -------- */ },
+				{ @"Go to Definition",                     @selector(lspGoToDefinition:),           @"d", .modifierFlags = NSEventModifierFlagCommand|NSEventModifierFlagOption },
+				{ @"Complete",                              @selector(lspComplete:),                 .modifierFlags = NSEventModifierFlagOption, .key = NSTabCharacter },
 			}
 		},
 		{ @"File Browser",

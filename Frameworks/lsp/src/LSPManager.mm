@@ -362,24 +362,8 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	NSString* uri = fileURL.absoluteString;
 
 	[client requestCompletionForURI:uri line:line character:character completion:^(NSArray<NSDictionary*>* suggestions) {
-		if(prefix.length == 0 || suggestions.count == 0)
-		{
-			if(callback)
-				callback(suggestions);
-			return;
-		}
-
-		// Client-side filtering using filterText
-		NSMutableArray<NSDictionary*>* filtered = [NSMutableArray new];
-		for(NSDictionary* item in suggestions)
-		{
-			NSString* filterText = item[@"filterText"];
-			if([filterText rangeOfString:prefix options:(NSCaseInsensitiveSearch | NSAnchoredSearch)].location != NSNotFound)
-				[filtered addObject:item];
-		}
-
 		if(callback)
-			callback(filtered);
+			callback(suggestions);
 	}];
 }
 

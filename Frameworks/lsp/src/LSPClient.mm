@@ -310,7 +310,7 @@ using json = nlohmann::json;
 				{"completion", {
 					{"dynamicRegistration", false},
 					{"completionItem", {
-						{"snippetSupport", false}
+						{"snippetSupport", true}
 					}}
 				}},
 				{"definition", {
@@ -497,18 +497,27 @@ using json = nlohmann::json;
 			items = result[@"items"];
 		}
 
-		for(NSDictionary* item in items)
+	for(NSDictionary* item in items)
 		{
 			NSString* label = item[@"label"];
 			if(label.length == 0)
 				continue;
 
-			NSString* filterText = item[@"filterText"] ?: label;
-			NSString* insertText = item[@"insertText"] ?: label;
+			NSString* insertText = item[@"insertText"];
+			NSNumber* insertTextFormat = item[@"insertTextFormat"];
+
+			// Servers use textEdit instead of insertText when snippetSupport is on
+			if(!insertText && item[@"textEdit"])
+			{
+				NSDictionary* textEdit = item[@"textEdit"];
+				insertText = textEdit[@"newText"];
+			}
+			if(!insertText)
+				insertText = label;
 
 			NSMutableDictionary* suggestion = [@{
 				@"label":      label,
-				@"filterText": filterText,
+				@"filterText": label,
 				@"insert":     insertText,
 			} mutableCopy];
 
@@ -516,6 +525,8 @@ using json = nlohmann::json;
 				suggestion[@"kind"] = item[@"kind"];
 			if(item[@"detail"])
 				suggestion[@"detail"] = item[@"detail"];
+			if(insertTextFormat)
+				suggestion[@"insertTextFormat"] = insertTextFormat;
 
 			[suggestions addObject:suggestion];
 		}

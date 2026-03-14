@@ -1,5 +1,10 @@
 # CLAUDE.md - TextMate Development Guide
 
+### Workflow
+- always activate serena project first (with full cwd path)
+- always list serena memories and always read task completion guideline
+
+
 ## Project Overview
 
 TextMate is a macOS-native text editor written in **Objective-C++**. Low-level data structures and algorithms are C++20; GUI code uses Objective-C++ with AppKit/Cocoa. Licensed under GPL v3. Minimum deployment target: macOS 14.0.
@@ -24,7 +29,7 @@ cmake/          - CMake helper functions (TextMateHelpers.cmake)
 ### Key Build Commands
 
 ```bash
-make debug           # Incremental debug build (ASan enabled)
+make                 # Incremental debug build (ASan enabled)
 make release         # Incremental release build (LTO, no ASan)
 make run             # Build debug and launch
 make clean           # Remove all build dirs

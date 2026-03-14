@@ -2259,20 +2259,28 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 			{
 				[self oldKeyDown:anEvent];
 				_lspFilterPrefix = [_lspFilterPrefix stringByAppendingString:chars];
-				[_lspCompletionPopup updateFilter:_lspFilterPrefix];
+				// Re-query server with updated cursor position for fresh results
+				[self lspComplete:nil];
 				return;
 			}
 			else if(isBackspace)
 			{
-				if(_lspFilterPrefix.length > 0)
+				[self oldKeyDown:anEvent];
+				// Check if there's still a word at caret to complete
+				size_t caret = documentView->ranges().last().last.index;
+				text::pos_t pos = documentView->convert(caret);
+				size_t bol = documentView->begin(pos.line);
+				std::string lineText = documentView->substr(bol, caret);
+				size_t ps = lineText.size();
+				while(ps > 0 && (isalnum(lineText[ps-1]) || lineText[ps-1] == '_'))
+					--ps;
+				if(lineText.size() - ps > 0)
 				{
-					[self oldKeyDown:anEvent];
-					_lspFilterPrefix = [_lspFilterPrefix substringToIndex:_lspFilterPrefix.length - 1];
-					[_lspCompletionPopup updateFilter:_lspFilterPrefix];
+					[self lspComplete:nil];
 					return;
 				}
 				[_lspCompletionPopup dismiss];
-				return [self oldKeyDown:anEvent];
+				return;
 			}
 			else
 			{
@@ -4747,12 +4755,74 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	NSMutableArray<OakCompletionItem*>* items = [NSMutableArray arrayWithCapacity:suggestions.count];
 	for(NSDictionary* s in suggestions)
 	{
+		NSString* label = s[@"label"] ?: s[@"display"] ?: @"";
+		NSString* insert = s[@"insert"];
+		NSString* detail = s[@"detail"] ?: @"";
+		int kind = [s[@"kind"] intValue];
+		BOOL isSnippet = [s[@"insertTextFormat"] intValue] == 2;
+
+		// For methods with $0 placeholder, parse params from detail and build proper snippet
+		if((kind == 2 || kind == 3 || kind == 4) && detail.length > 0)
+		{
+			NSRange parenRange = [detail rangeOfString:@"("];
+			if(parenRange.location != NSNotFound)
+			{
+				// Extract params between first ( and matching )
+				NSString* afterParen = [detail substringFromIndex:parenRange.location + 1];
+				// Find closing ) before return type
+				NSRange closeRange = [afterParen rangeOfString:@")"];
+				if(closeRange.location != NSNotFound && closeRange.location > 0)
+				{
+					NSString* paramStr = [afterParen substringToIndex:closeRange.location];
+					// Strip optional brackets: [?string $context [, string $key]] -> ?string $context , string $key
+					paramStr = [paramStr stringByReplacingOccurrencesOfString:@"[" withString:@""];
+					paramStr = [paramStr stringByReplacingOccurrencesOfString:@"]" withString:@""];
+
+					// Extract $paramName patterns from the param string
+					NSRegularExpression* regex = [NSRegularExpression regularExpressionWithPattern:@"\\$([a-zA-Z_][a-zA-Z0-9_]*)" options:0 error:nil];
+					NSArray<NSTextCheckingResult*>* matches = [regex matchesInString:paramStr options:0 range:NSMakeRange(0, paramStr.length)];
+
+					if(matches.count > 0)
+					{
+						NSMutableString* snippet = [NSMutableString stringWithFormat:@"%@(", label];
+						for(NSUInteger i = 0; i < matches.count; i++)
+						{
+							NSString* paramName = [paramStr substringWithRange:[matches[i] rangeAtIndex:1]];
+							if(i > 0) [snippet appendString:@", "];
+							[snippet appendString:@"\\$"];
+						[snippet appendFormat:@"${%lu:%@}", (unsigned long)(i + 1), paramName];
+						}
+						[snippet appendString:@")"];
+						insert = snippet;
+						isSnippet = YES;
+					}
+				}
+			}
+		}
+
 		OakCompletionItem* item = [[OakCompletionItem alloc]
-			initWithLabel:s[@"label"] ?: s[@"display"] ?: @""
-			   insertText:s[@"insert"]
-			       detail:s[@"detail"] ?: @""
-			         kind:[s[@"kind"] intValue]];
+			initWithLabel:label insertText:insert detail:detail kind:kind];
+		item.isSnippet = isSnippet;
 		[items addObject:item];
+	}
+
+	// Sort: prefix matches first, then substring matches
+	NSString* prefixLower = [to_ns(documentView->substr(
+		documentView->begin(documentView->convert(documentView->ranges().last().last.index).line),
+		documentView->ranges().last().last.index)) lowercaseString];
+	// Extract just the word prefix
+	NSRange wordRange = [prefixLower rangeOfCharacterFromSet:[NSCharacterSet alphanumericCharacterSet].invertedSet options:NSBackwardsSearch];
+	NSString* wordPrefix = wordRange.location == NSNotFound ? prefixLower : [prefixLower substringFromIndex:wordRange.location + 1];
+
+	if(wordPrefix.length > 0)
+	{
+		[items sortUsingComparator:^NSComparisonResult(OakCompletionItem* a, OakCompletionItem* b) {
+			BOOL aPrefix = [a.label.lowercaseString hasPrefix:wordPrefix];
+			BOOL bPrefix = [b.label.lowercaseString hasPrefix:wordPrefix];
+			if(aPrefix != bPrefix)
+				return aPrefix ? NSOrderedAscending : NSOrderedDescending;
+			return [a.label caseInsensitiveCompare:b.label];
+		}];
 	}
 
 	_lspInitialPrefixLength = prefixLen;
@@ -4938,7 +5008,16 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	NSUInteger deleteCount = _lspInitialPrefixLength + _lspFilterPrefix.length;
 	size_t from = caret - deleteCount;
 	documentView->set_ranges(ng::range_t(from, caret));
-	documentView->insert(to_s(item.effectiveInsertText));
+
+	if(item.isSnippet)
+	{
+		documentView->insert("");
+		[self insertSnippetWithOptions:@{ @"content": item.effectiveInsertText }];
+	}
+	else
+	{
+		documentView->insert(to_s(item.effectiveInsertText));
+	}
 
 	_lspFilterPrefix = nil;
 }
