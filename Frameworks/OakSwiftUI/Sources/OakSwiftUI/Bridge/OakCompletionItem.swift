@@ -1,6 +1,7 @@
 import AppKit
 
-@objc public class OakCompletionItem: NSObject {
+@objc public class OakCompletionItem: NSObject, Identifiable {
+    public let id = UUID()
     @objc public let label: String
     @objc public let insertText: String?
     @objc public let detail: String

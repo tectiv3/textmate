@@ -14,7 +14,13 @@ import SwiftUI
     }
 
     @objc public func show(in parentView: NSView, at point: NSPoint, items: [OakCompletionItem]) {
-        dismiss()
+        // Tear down previous window without firing delegate callback
+        if let w = window {
+            w.parent?.removeChildWindow(w)
+            w.orderOut(nil)
+            window = nil
+            viewModel = nil
+        }
 
         let vm = CompletionViewModel()
         vm.setItems(items)
@@ -25,9 +31,11 @@ import SwiftUI
 
         let hostingView = NSHostingView(rootView: listView)
 
+        let rowHeight = max(theme.fontSize * 1.8, 22)
         let itemCount = min(items.count, 12)
-        let height = CGFloat(itemCount) * 26 + 8
-        let width: CGFloat = 350
+        let height = CGFloat(itemCount) * rowHeight + 8
+        let maxLabelWidth = items.prefix(50).map { ($0.label as NSString).size(withAttributes: [.font: theme.font]).width }.max() ?? 200
+        let width = min(max(maxLabelWidth + 120, 250), 600)
 
         let screenPoint = parentView.window?.convertPoint(toScreen:
             parentView.convert(point, to: nil)) ?? point
@@ -56,6 +64,19 @@ import SwiftUI
 
     @objc public func updateFilter(_ text: String) {
         viewModel?.updateFilter(text)
+        resizePanelToFit()
+    }
+
+    private func resizePanelToFit() {
+        guard let w = window, let vm = viewModel else { return }
+        let rowHeight = max(theme.fontSize * 1.8, 22)
+        let itemCount = min(vm.filteredItems.count, 12)
+        let newHeight = CGFloat(itemCount) * rowHeight + 8
+        var frame = w.frame
+        let delta = newHeight - frame.height
+        frame.origin.y -= delta
+        frame.size.height = newHeight
+        w.setFrame(frame, display: true, animate: false)
     }
 
     @objc public func handleKeyEvent(_ event: NSEvent) -> Bool {

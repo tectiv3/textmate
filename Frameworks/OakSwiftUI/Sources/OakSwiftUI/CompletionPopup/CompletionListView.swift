@@ -8,12 +8,12 @@ struct CompletionListView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(viewModel.filteredItems.enumerated()), id: \.offset) { index, item in
+                    ForEach(Array(viewModel.filteredItems.enumerated()), id: \.element.id) { index, item in
                         CompletionRowView(
                             item: item,
                             isSelected: index == viewModel.selectedIndex
                         )
-                        .id(index)
+                        .id(item.id)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(item.label)
                         .accessibilityHint(item.detail)
@@ -24,8 +24,9 @@ struct CompletionListView: View {
             }
             .accessibilityElement(children: .contain)
             .onChange(of: viewModel.selectedIndex) { _, newValue in
+                guard newValue < viewModel.filteredItems.count else { return }
                 withAnimation(.easeOut(duration: 0.1)) {
-                    proxy.scrollTo(newValue, anchor: .center)
+                    proxy.scrollTo(viewModel.filteredItems[newValue].id, anchor: .center)
                 }
             }
         }

@@ -15,7 +15,7 @@ struct CompletionRowView: View {
 
             Text(item.label)
                 .font(.system(size: theme.fontSize, design: .monospaced))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .foregroundStyle(isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
                 .lineLimit(1)
 
             Spacer()
@@ -23,7 +23,7 @@ struct CompletionRowView: View {
             if !item.detail.isEmpty {
                 Text(item.detail)
                     .font(.system(size: max(theme.fontSize - 2, 9)))
-                    .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
+                    .foregroundStyle(isSelected ? Color(nsColor: .alternateSelectedControlTextColor).opacity(0.7) : .secondary)
                     .lineLimit(1)
             }
         }

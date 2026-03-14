@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-@objc public class OakThemeEnvironment: NSObject, ObservableObject {
+@MainActor @objc public class OakThemeEnvironment: NSObject, ObservableObject {
     @Published @objc public var fontName: String = "Menlo"
     @Published @objc public var fontSize: CGFloat = 12
     @Published @objc public var backgroundColor: NSColor = .textBackgroundColor
