@@ -455,6 +455,70 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestReferencesForURI:uri line:line character:character completion:callback];
 }
 
+- (void)requestFormattingForDocument:(OakDocument*)document tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client || !client.documentFormattingProvider)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client requestFormattingForURI:uri tabSize:tabSize insertSpaces:insertSpaces completion:callback];
+}
+
+- (void)requestRangeFormattingForDocument:(OakDocument*)document startLine:(NSUInteger)startLine startCharacter:(NSUInteger)startCharacter endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client || !client.documentRangeFormattingProvider)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client requestRangeFormattingForURI:uri startLine:startLine startCharacter:startCharacter endLine:endLine endCharacter:endCharacter tabSize:tabSize insertSpaces:insertSpaces completion:callback];
+}
+
+- (BOOL)serverSupportsFormattingForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.documentFormattingProvider;
+}
+
+- (BOOL)serverSupportsRangeFormattingForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.documentRangeFormattingProvider;
+}
+
 - (BOOL)hasClientForDocument:(OakDocument*)document
 {
 	return document && _documentClients[document.identifier] != nil;
