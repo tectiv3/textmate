@@ -58,7 +58,7 @@ namespace plist
 			{
 				if(T const* typedValue = ::plist::get<T>(&value))
 						obj->*_field = *typedValue;
-				else	obj->*_field = ::plist::get<T>(value);
+				else	obj->*_field = ::plist::convert<T>(value);
 				return true;
 			}
 
@@ -80,7 +80,7 @@ namespace plist
 			{
 				if(SRC_T const* typedValue = ::plist::get<SRC_T>(&value))
 						return _converter(*typedValue, obj->*_field);
-				else	return _converter(get<SRC_T>(value), obj->*_field);
+				else	return _converter(::plist::convert<SRC_T>(value), obj->*_field);
 			}
 
 			DST_T OBJ_TYPE::* _field;
