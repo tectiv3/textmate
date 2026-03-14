@@ -15,7 +15,7 @@
 @property (nonatomic, weak) id<LSPClientDelegate> delegate;
 @property (nonatomic, readonly) BOOL initialized;
 @property (nonatomic, readonly) BOOL running;
-- (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory;
+- (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory initOptions:(NSString*)initOptionsJSON;
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId;
 - (void)documentDidChange:(OakDocument*)document version:(int)version;
 - (void)documentDidSave:(OakDocument*)document;

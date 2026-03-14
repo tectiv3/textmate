@@ -74,6 +74,7 @@ npm install -g @anthropics/intelephense
 # .tm_properties
 [ *.php ]
 lspCommand = "/opt/homebrew/bin/intelephense" --stdio
+lspInitOptions = {"licenceKey":"YOUR-KEY-HERE","clearCache":true}
 ```
 
 ### Go (gopls)
@@ -110,6 +111,7 @@ npm install -g @vue/language-server
 # .tm_properties
 [ *.{vue,ts,tsx,js,jsx} ]
 lspCommand = "/opt/homebrew/bin/vue-language-server" --stdio
+lspInitOptions = {"typescript":{"tsdk":"node_modules/typescript/lib"}}
 ```
 
 ### Settings
@@ -119,6 +121,7 @@ lspCommand = "/opt/homebrew/bin/vue-language-server" --stdio
 | `lspCommand` | Command to launch the language server (required) |
 | `lspEnabled` | Set to `false` to disable LSP for matching files (default: `true`) |
 | `lspRootPath` | Override workspace root detection |
+| `lspInitOptions` | JSON object passed as `initializationOptions` to the server |
 
 Press **Opt+Tab** to trigger LSP completions. Diagnostics (errors, warnings) appear automatically in the gutter.
 

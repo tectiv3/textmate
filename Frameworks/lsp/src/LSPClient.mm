@@ -16,6 +16,7 @@ using json = nlohmann::json;
 	int _nextRequestId;
 	BOOL _initialized;
 	NSString* _workingDirectory;
+	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
 }
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId retryCount:(int)retryCount;
@@ -28,11 +29,12 @@ using json = nlohmann::json;
 	return _task.isRunning;
 }
 
-- (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory
+- (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory initOptions:(NSString*)initOptionsJSON
 {
 	if(self = [super init])
 	{
 		_workingDirectory = workingDirectory;
+		_initOptionsJSON = initOptionsJSON;
 		_readQueue = dispatch_queue_create("com.macromates.lsp.read", DISPATCH_QUEUE_SERIAL);
 		_nextRequestId = 1;
 		_initialized = NO;
@@ -327,7 +329,7 @@ using json = nlohmann::json;
 	json params = {
 		{"processId",    (int)NSProcessInfo.processInfo.processIdentifier},
 		{"rootUri",      [NSURL fileURLWithPath:_workingDirectory].absoluteString.UTF8String},
-		{"initializationOptions", json::object()},
+		{"initializationOptions", _initOptionsJSON.length ? json::parse(_initOptionsJSON.UTF8String, nullptr, false) : json::object()},
 		{"capabilities", {
 			{"textDocument", {
 				{"publishDiagnostics", {

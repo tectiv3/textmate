@@ -1,4 +1,6 @@
-.PHONY: debug release clean clean-debug clean-release run swift-build-debug swift-build-release
+.PHONY: all debug release clean clean-debug clean-release run swift-build-debug swift-build-release
+
+all: debug
 
 swift-build-debug:
 	@if command -v swift >/dev/null 2>&1; then \

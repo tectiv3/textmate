@@ -214,7 +214,10 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	for(size_t i = 1; i < parts.size(); ++i)
 		[args addObject:to_ns(parts[i])];
 
-	client = [[LSPClient alloc] initWithCommand:executable arguments:args workingDirectory:root];
+	std::string initOpts = settings.get("lspInitOptions", "");
+	NSString* initOptsJSON = initOpts.empty() ? nil : to_ns(initOpts);
+
+	client = [[LSPClient alloc] initWithCommand:executable arguments:args workingDirectory:root initOptions:initOptsJSON];
 	client.delegate = self;
 	_clients[root] = client;
 	return client;
