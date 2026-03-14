@@ -59,6 +59,69 @@ make clean           # Remove all build dirs
 | ragel | Replaced | Hand-written parser |
 | boost (variant + crc) | Replaced | `std::variant` + zlib `crc32` |
 
+## LSP Support
+
+TextMate has built-in Language Server Protocol support for diagnostics and completions. Configure it per-project in `.tm_properties`:
+
+### PHP (intelephense)
+
+```sh
+brew install node
+npm install -g @anthropics/intelephense
+```
+
+```
+# .tm_properties
+[ *.php ]
+lspCommand = "/opt/homebrew/bin/intelephense" --stdio
+```
+
+### Go (gopls)
+
+```sh
+go install golang.org/x/tools/gopls@latest
+```
+
+```
+# .tm_properties
+[ *.go ]
+lspCommand = "$GOPATH/bin/gopls"
+```
+
+### C/C++/Objective-C (clangd)
+
+```sh
+brew install llvm
+```
+
+```
+# .tm_properties
+[ *.{c,cc,cpp,h,hpp,m,mm} ]
+lspCommand = "/opt/homebrew/opt/llvm/bin/clangd"
+```
+
+### Vue/TypeScript (volar)
+
+```sh
+npm install -g @vue/language-server
+```
+
+```
+# .tm_properties
+[ *.{vue,ts,tsx,js,jsx} ]
+lspCommand = "/opt/homebrew/bin/vue-language-server" --stdio
+```
+
+### Settings
+
+| Property | Description |
+|----------|-------------|
+| `lspCommand` | Command to launch the language server (required) |
+| `lspEnabled` | Set to `false` to disable LSP for matching files (default: `true`) |
+| `lspRootPath` | Override workspace root detection |
+
+Press **Opt+Tab** to trigger LSP completions. Diagnostics (errors, warnings) appear automatically in the gutter.
+
 # Legal
 
 The source for TextMate is released under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
