@@ -1,7 +1,7 @@
 #import "LSPClient.h"
 #import <nlohmann/json.hpp>
-#import <settings/settings.h>
 #import <oak/debug.h>
+#import <ns/ns.h>
 
 using json = nlohmann::json;
 
@@ -16,10 +16,15 @@ using json = nlohmann::json;
 	BOOL _initialized;
 	NSString* _workingDirectory;
 }
-- (void)openDocument:(OakDocument*)document retryCount:(int)retryCount;
+- (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId retryCount:(int)retryCount;
 @end
 
 @implementation LSPClient
+
+- (BOOL)running
+{
+	return _task.isRunning;
+}
 
 - (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory
 {
@@ -198,10 +203,26 @@ using json = nlohmann::json;
 	if(msg.contains("method"))
 	{
 		std::string method = msg["method"].get<std::string>();
-		if(method == "textDocument/publishDiagnostics")
+
+		if(msg.contains("id"))
+		{
+			// Server-initiated request — must reply or server will hang
+			NSLog(@"[LSP] <-- request: %s (id=%d)", method.c_str(), msg["id"].get<int>());
+			json response = {
+				{"jsonrpc", "2.0"},
+				{"id",      msg["id"]},
+				{"result",  json::object()}
+			};
+			[self sendMessage:response];
+		}
+		else if(method == "textDocument/publishDiagnostics")
+		{
 			[self handleDiagnostics:msg["params"]];
+		}
 		else
+		{
 			NSLog(@"[LSP] <-- notification: %s", method.c_str());
+		}
 	}
 	else if(msg.contains("id"))
 	{
@@ -224,10 +245,12 @@ using json = nlohmann::json;
 
 - (void)handleDiagnostics:(json const&)params
 {
-	std::string uri = params["uri"].get<std::string>();
+	std::string uriStr = params["uri"].get<std::string>();
 	auto const& diagnostics = params["diagnostics"];
 
-	NSLog(@"[LSP] Diagnostics for %s: %lu items", uri.c_str(), (unsigned long)diagnostics.size());
+	NSLog(@"[LSP] Diagnostics for %s: %lu items", uriStr.c_str(), (unsigned long)diagnostics.size());
+
+	NSMutableArray<NSDictionary*>* results = [NSMutableArray arrayWithCapacity:diagnostics.size()];
 
 	for(auto const& diag : diagnostics)
 	{
@@ -236,17 +259,15 @@ using json = nlohmann::json;
 		int severity = diag.value("severity", 1);
 		std::string message = diag["message"].get<std::string>();
 
-		char const* severityStr = "unknown";
-		switch(severity)
-		{
-			case 1: severityStr = "error";   break;
-			case 2: severityStr = "warning"; break;
-			case 3: severityStr = "info";    break;
-			case 4: severityStr = "hint";    break;
-		}
-
-		NSLog(@"[LSP]   %s:%d:%d [%s] %s", uri.c_str(), line + 1, col + 1, severityStr, message.c_str());
+		[results addObject:@{
+			@"line":      @(line),
+			@"character": @(col),
+			@"severity":  @(severity),
+			@"message":   to_ns(message)
+		}];
 	}
+
+	[_delegate lspClient:self didReceiveDiagnostics:results forDocumentURI:to_ns(uriStr)];
 }
 
 // MARK: - LSP lifecycle
@@ -271,7 +292,7 @@ using json = nlohmann::json;
 	[self sendRequest:@"initialize" params:params];
 }
 
-- (void)openDocument:(OakDocument*)document retryCount:(int)retryCount
+- (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId retryCount:(int)retryCount
 {
 	if(!_initialized)
 	{
@@ -282,7 +303,7 @@ using json = nlohmann::json;
 		}
 		NSLog(@"[LSP] Not yet initialized, deferring didOpen (attempt %d)", retryCount + 1);
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-			[self openDocument:document retryCount:retryCount + 1];
+			[self openDocument:document languageId:languageId retryCount:retryCount + 1];
 		});
 		return;
 	}
@@ -294,9 +315,6 @@ using json = nlohmann::json;
 	NSString* content = document.content;
 	if(!content)
 		return;
-
-	// Map TextMate fileType (scope) to LSP languageId
-	NSString* languageId = @"php";  // PoC: hardcoded for intelephense
 
 	NSURL* fileURL = [NSURL fileURLWithPath:path];
 	std::string uri = fileURL.absoluteString.UTF8String;
@@ -312,9 +330,68 @@ using json = nlohmann::json;
 	[self sendNotification:@"textDocument/didOpen" params:params];
 }
 
-- (void)openDocument:(OakDocument*)document
+- (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId
 {
-	[self openDocument:document retryCount:0];
+	[self openDocument:document languageId:languageId retryCount:0];
+}
+
+- (void)documentDidChange:(OakDocument*)document version:(int)version
+{
+	NSString* path = document.path;
+	if(!path)
+		return;
+
+	NSString* content = document.content;
+	if(!content)
+		return;
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	std::string uri = fileURL.absoluteString.UTF8String;
+
+	json params = {
+		{"textDocument", {
+			{"uri",     uri},
+			{"version", version}
+		}},
+		{"contentChanges", {
+			{{"text", content.UTF8String}}
+		}}
+	};
+	[self sendNotification:@"textDocument/didChange" params:params];
+}
+
+- (void)documentDidSave:(OakDocument*)document
+{
+	NSString* path = document.path;
+	if(!path)
+		return;
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	std::string uri = fileURL.absoluteString.UTF8String;
+
+	json params = {
+		{"textDocument", {
+			{"uri", uri}
+		}}
+	};
+	[self sendNotification:@"textDocument/didSave" params:params];
+}
+
+- (void)closeDocument:(OakDocument*)document
+{
+	NSString* path = document.path;
+	if(!path)
+		return;
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	std::string uri = fileURL.absoluteString.UTF8String;
+
+	json params = {
+		{"textDocument", {
+			{"uri", uri}
+		}}
+	};
+	[self sendNotification:@"textDocument/didClose" params:params];
 }
 
 - (void)shutdown

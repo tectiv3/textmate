@@ -338,7 +338,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 				                                      arguments:@[@"--stdio"]
 				                               workingDirectory:rootDir];
 			}
-			[_lspClient openDocument:aDocument];
+			[_lspClient openDocument:aDocument languageId:@"php"];
 		}
 	}
 
