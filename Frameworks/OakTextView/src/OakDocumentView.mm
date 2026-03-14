@@ -1,6 +1,6 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
-#import "LSPClient.h"
+#import <lsp/LSPClient.h>
 #import "OTVStatusBar.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
