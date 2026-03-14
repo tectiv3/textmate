@@ -8,4 +8,4 @@ target_link_libraries(OakAppKit PUBLIC
   OakFoundation bundles crash file io ns parse regexp settings text theme)
 target_link_libraries(OakAppKit PRIVATE
   "-framework Carbon" "-framework Cocoa" "-framework AudioToolbox" "-framework Quartz"
-  sqlite3)
+  "-framework UniformTypeIdentifiers" sqlite3)

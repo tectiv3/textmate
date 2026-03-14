@@ -8,7 +8,7 @@ static NSString* const kVariableKeyEnabled = @"enabled";
 static NSString* const kVariableKeyName    = @"name";
 static NSString* const kVariableKeyValue   = @"value";
 
-@interface VariablesPreferences () <NSTableViewDelegate, NSTableViewDataSource>
+@interface VariablesPreferences () <NSTableViewDelegate, NSTableViewDataSource, NSEditor>
 {
 	NSTableView* variablesTableView;
 }

@@ -861,7 +861,12 @@ namespace path
 			}
 			else
 			{
-				mktemp(&str[0]);
+				int fd = mkstemp(&str[0]);
+			if(fd != -1)
+			{
+				close(fd);
+				unlink(str.c_str());
+			}
 			}
 		}
 		return str;

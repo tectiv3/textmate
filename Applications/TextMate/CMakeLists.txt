@@ -11,7 +11,7 @@ target_link_libraries(TextMate PRIVATE
   ${TEXTMATE_DEBUG_LIBS}
 )
 
-target_link_libraries(TextMate PRIVATE "-framework Cocoa")
+target_link_libraries(TextMate PRIVATE "-framework Cocoa" "-framework UniformTypeIdentifiers")
 
 # network headers need special handling — can't use <network/...> include
 # path because it shadows Apple's Network.framework on case-insensitive macOS

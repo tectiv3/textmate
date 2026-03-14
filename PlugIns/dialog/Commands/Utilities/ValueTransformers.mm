@@ -105,7 +105,7 @@ static NSString* NSStringFromColor (NSColor* aColor)
 	if(aColor == nil)
 		return nil;
 
-	aColor = [aColor colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+	aColor = [aColor colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
 	if([aColor alphaComponent] != 1.0)
 			return [NSString stringWithFormat:@"#%02lX%02lX%02lX%02lX", lroundf(255.0*[aColor redComponent]), lroundf(255.0*[aColor greenComponent]), lroundf(255.0*[aColor blueComponent]), lroundf(255.0*[aColor alphaComponent])];
 	else	return [NSString stringWithFormat:@"#%02lX%02lX%02lX", lroundf(255.0*[aColor redComponent]), lroundf(255.0*[aColor greenComponent]), lroundf(255.0*[aColor blueComponent])];

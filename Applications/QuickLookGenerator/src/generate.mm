@@ -1,4 +1,5 @@
 #import <OSAKit/OSAKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "plugin.h"
 #import <buffer/buffer.h>
 #import <bundles/bundles.h>
@@ -199,7 +200,7 @@ OSStatus TextMateQuickLookPlugIn_GeneratePreviewForURL (void* instance, QLPrevie
 	{
 		// We don't know the type, let the system handle it
 		NSData* data = [NSData dataWithContentsOfURL:(__bridge NSURL*)url];
-		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, kUTTypePlainText, nil);
+		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, (__bridge CFStringRef)UTTypePlainText.identifier, nil);
 		return noErr;
 	}
 
@@ -222,7 +223,7 @@ OSStatus TextMateQuickLookPlugIn_GeneratePreviewForURL (void* instance, QLPrevie
 	if(!output)
 	{
 		NSData* data = [NSData dataWithContentsOfURL:(__bridge NSURL*)url];
-		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, kUTTypePlainText, nil);
+		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, (__bridge CFStringRef)UTTypePlainText.identifier, nil);
 		return noErr;
 	}
 
@@ -235,7 +236,7 @@ OSStatus TextMateQuickLookPlugIn_GeneratePreviewForURL (void* instance, QLPrevie
 		NSBackgroundColorDocumentAttribute: theme ? [NSColor colorWithCGColor:theme->background(fileType)] : [NSColor whiteColor],
 	}];
 
-	QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)outputData, kUTTypeRTF, nil);
+	QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)outputData, (__bridge CFStringRef)UTTypeRTF.identifier, nil);
 	return noErr;
 }
 
