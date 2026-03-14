@@ -13,6 +13,25 @@ target_link_libraries(TextMate PRIVATE
 
 target_link_libraries(TextMate PRIVATE "-framework Cocoa" "-framework UniformTypeIdentifiers")
 
+# OakSwiftUI (optional SwiftUI framework)
+if(OakSwiftUI_LIB)
+  target_link_libraries(TextMate PRIVATE ${OakSwiftUI_LIB})
+  target_compile_definitions(TextMate PRIVATE HAVE_OAK_SWIFTUI=1)
+
+  # Copy dylib into app bundle and set rpath
+  add_custom_command(TARGET TextMate POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<TARGET_BUNDLE_DIR:TextMate>/Contents/Frameworks"
+    COMMAND ${CMAKE_COMMAND} -E copy
+      "${CMAKE_BINARY_DIR}/lib/libOakSwiftUI.dylib"
+      "$<TARGET_BUNDLE_DIR:TextMate>/Contents/Frameworks/libOakSwiftUI.dylib"
+  )
+  set_target_properties(TextMate PROPERTIES
+    BUILD_RPATH "@executable_path/../Frameworks"
+    INSTALL_RPATH "@executable_path/../Frameworks"
+  )
+endif()
+
 # Info.plist variable expansion
 set(TARGET_NAME "TextMate")
 set(BUNDLE_IDENTIFIER "com.macromates.TextMate-dev")

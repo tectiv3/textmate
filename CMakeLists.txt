@@ -72,6 +72,15 @@ set(CS_IDENTITY "-" CACHE STRING "Code signing identity (- for ad-hoc)")
 # through header templates — needed in all build configs, not just debug
 set(TEXTMATE_DEBUG_LIBS OakDebug)
 
+# === OakSwiftUI (optional Swift framework) ===
+find_library(OakSwiftUI_LIB NAMES OakSwiftUI
+  PATHS "${CMAKE_BINARY_DIR}/lib" NO_DEFAULT_PATH)
+if(OakSwiftUI_LIB)
+  message(STATUS "Found OakSwiftUI: ${OakSwiftUI_LIB}")
+else()
+  message(STATUS "OakSwiftUI not found — SwiftUI features disabled")
+endif()
+
 # === Vendor ===
 add_subdirectory(vendor/Onigmo)
 add_subdirectory(vendor/kvdb)

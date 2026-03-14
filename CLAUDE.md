@@ -32,7 +32,7 @@ make clean           # Remove all build dirs
 
 ### Dependencies
 
-ninja, cmake
+ninja, cmake, swift (optional, for OakSwiftUI framework)
 
 ### Build Quirks
 
