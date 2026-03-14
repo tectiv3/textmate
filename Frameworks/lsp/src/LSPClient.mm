@@ -506,11 +506,18 @@ using json = nlohmann::json;
 			NSString* filterText = item[@"filterText"] ?: label;
 			NSString* insertText = item[@"insertText"] ?: label;
 
-			[suggestions addObject:@{
+			NSMutableDictionary* suggestion = [@{
 				@"label":      label,
 				@"filterText": filterText,
-				@"insert":     insertText
-			}];
+				@"insert":     insertText,
+			} mutableCopy];
+
+			if(item[@"kind"])
+				suggestion[@"kind"] = item[@"kind"];
+			if(item[@"detail"])
+				suggestion[@"detail"] = item[@"detail"];
+
+			[suggestions addObject:suggestion];
 		}
 
 		if(callback)

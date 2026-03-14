@@ -34,8 +34,10 @@ import SwiftUI
         let rowHeight = max(theme.fontSize * 1.8, 22)
         let itemCount = min(items.count, 12)
         let height = CGFloat(itemCount) * rowHeight + 8
+        let detailFont = NSFont.systemFont(ofSize: max(theme.fontSize - 2, 9))
         let maxLabelWidth = items.prefix(50).map { ($0.label as NSString).size(withAttributes: [.font: theme.font]).width }.max() ?? 200
-        let width = min(max(maxLabelWidth + 120, 250), 600)
+        let maxDetailWidth = items.prefix(50).map { ($0.detail as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0
+        let width = min(max(maxLabelWidth + maxDetailWidth + 60, 280), 650)
 
         let screenPoint = parentView.window?.convertPoint(toScreen:
             parentView.convert(point, to: nil)) ?? point
