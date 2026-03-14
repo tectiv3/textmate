@@ -7,3 +7,4 @@ target_link_libraries(OakTextView PUBLIC
   OakFilterList OakFoundation OakSystem Preferences buffer bundles cf command
   crash document editor file io layout ns settings text theme
   "-framework Cocoa")
+target_include_directories(OakTextView PRIVATE "${CMAKE_SOURCE_DIR}/vendor")
