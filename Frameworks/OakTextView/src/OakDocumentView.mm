@@ -1,5 +1,6 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
+#import "LSPClient.h"
 #import "OTVStatusBar.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
@@ -40,6 +41,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSMutableArray* bottomAuxiliaryViews;
 
 	IBOutlet NSPanel* tabSizeSelectorPanel;
+
+	LSPClient* _lspClient;
 }
 @property (nonatomic, readonly) OTVStatusBar* statusBar;
 @property (nonatomic) SymbolChooser* symbolChooser;
@@ -302,6 +305,12 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentMarksDidChangeNotification object:oldDocument];
 	}
 
+	if(_lspClient && !aDocument)
+	{
+		[_lspClient shutdown];
+		_lspClient = nil;
+	}
+
 	if(aDocument)
 		[aDocument loadModalForWindow:self.window completionHandler:nullptr];
 
@@ -315,6 +324,23 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	[_textView setDocument:self.document];
 	[gutterView reloadData:self];
 	[self updateStyle];
+
+	// LSP PoC: spawn intelephense if TM_ENABLE_IS is set
+	if(aDocument.path)
+	{
+		auto vars = variables_for_path({}, to_s(aDocument.path), to_s(aDocument.fileType), to_s(aDocument.directory ?: [aDocument.path stringByDeletingLastPathComponent]));
+		if(auto it = vars.find("TM_ENABLE_IS"); it != vars.end() && it->second == "true")
+		{
+			if(!_lspClient)
+			{
+				NSString* rootDir = aDocument.directory ?: [aDocument.path stringByDeletingLastPathComponent];
+				_lspClient = [[LSPClient alloc] initWithCommand:@"/opt/homebrew/bin/intelephense"
+				                                      arguments:@[@"--stdio"]
+				                               workingDirectory:rootDir];
+			}
+			[_lspClient openDocument:aDocument];
+		}
+	}
 
 	if(_symbolChooser)
 	{
