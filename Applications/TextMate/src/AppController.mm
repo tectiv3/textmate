@@ -354,6 +354,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 				{ @"Filter Through Command…",              @selector(orderFrontRunCommandWindow:), @"|" },
 				{ /* -------- */ },
 				{ @"Go to Definition",                     @selector(lspGoToDefinition:),           @"d", .modifierFlags = NSEventModifierFlagCommand|NSEventModifierFlagOption },
+				{ @"Show Hover Info",                      @selector(lspShowHoverInfo:),            @"i", .modifierFlags = NSEventModifierFlagCommand|NSEventModifierFlagOption },
 				{ @"Complete",                              @selector(lspComplete:),                 .modifierFlags = NSEventModifierFlagOption, .key = NSTabCharacter },
 			}
 		},

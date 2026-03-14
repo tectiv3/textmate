@@ -7,6 +7,8 @@
 
 @protocol LSPClientDelegate <NSObject>
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri;
+@optional
+- (void)lspClientDidTerminate:(LSPClient*)client;
 @end
 
 @interface LSPClient : NSObject
@@ -21,6 +23,7 @@
 - (void)shutdown;
 - (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback;
 - (void)requestDefinitionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback;
+- (void)requestHoverForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback;
 @end
 
 #endif /* LSP_CLIENT_H_POC */

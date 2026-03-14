@@ -13,6 +13,10 @@ import SwiftUI
     }
 
     @objc public func show(in view: NSView, at rect: NSRect, content: OakTooltipContent) {
+        show(in: view, at: rect, content: content, preferredEdge: .maxY)
+    }
+
+    @objc public func show(in view: NSView, at rect: NSRect, content: OakTooltipContent, preferredEdge edge: NSRectEdge) {
         dismiss()
 
         let tooltipView = TooltipContentView(content: content)
@@ -24,7 +28,7 @@ import SwiftUI
         pop.contentViewController = hostingController
         pop.behavior = .semitransient
         pop.delegate = self
-        pop.show(relativeTo: rect, of: view, preferredEdge: .minY)
+        pop.show(relativeTo: rect, of: view, preferredEdge: edge)
         self.popover = pop
     }
 

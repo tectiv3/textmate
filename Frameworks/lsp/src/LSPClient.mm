@@ -2,6 +2,7 @@
 #import <nlohmann/json.hpp>
 #import <oak/debug.h>
 #import <ns/ns.h>
+#import <signal.h>
 
 using json = nlohmann::json;
 
@@ -56,8 +57,21 @@ using json = nlohmann::json;
 			env[@"PATH"] = [@"/opt/homebrew/bin:/opt/homebrew/sbin:" stringByAppendingString:path];
 		_task.environment = env;
 
+		// SIGPIPE kills the process before @try/@catch can handle broken pipe writes
+		signal(SIGPIPE, SIG_IGN);
+
+		__weak LSPClient* weakSelf = self;
 		_task.terminationHandler = ^(NSTask* task){
 			NSLog(@"[LSP] Server terminated with status %d", task.terminationStatus);
+			dispatch_async(dispatch_get_main_queue(), ^{
+				LSPClient* strongSelf = weakSelf;
+				if(!strongSelf)
+					return;
+				strongSelf->_initialized = NO;
+				[strongSelf cancelPendingCallbacks];
+				if([strongSelf->_delegate respondsToSelector:@selector(lspClientDidTerminate:)])
+					[strongSelf->_delegate lspClientDidTerminate:strongSelf];
+			});
 		};
 
 		NSError* error = nil;
@@ -78,8 +92,23 @@ using json = nlohmann::json;
 
 // MARK: - JSON-RPC framing
 
+- (void)cancelPendingCallbacks
+{
+	NSDictionary<NSNumber*, void(^)(id)>* callbacks = [_responseCallbacks copy];
+	[_responseCallbacks removeAllObjects];
+	for(NSNumber* key in callbacks)
+	{
+		void(^callback)(id) = callbacks[key];
+		if(callback)
+			callback(nil);
+	}
+}
+
 - (void)sendMessage:(json const&)message
 {
+	if(!_task.isRunning)
+		return;
+
 	std::string body = message.dump();
 	NSString* header = [NSString stringWithFormat:@"Content-Length: %lu\r\n\r\n", (unsigned long)body.size()];
 
@@ -298,6 +327,7 @@ using json = nlohmann::json;
 	json params = {
 		{"processId",    (int)NSProcessInfo.processInfo.processIdentifier},
 		{"rootUri",      [NSURL fileURLWithPath:_workingDirectory].absoluteString.UTF8String},
+		{"initializationOptions", json::object()},
 		{"capabilities", {
 			{"textDocument", {
 				{"publishDiagnostics", {
@@ -315,6 +345,10 @@ using json = nlohmann::json;
 				}},
 				{"definition", {
 					{"dynamicRegistration", false}
+				}},
+				{"hover", {
+					{"dynamicRegistration", false},
+					{"contentFormat", {"markdown", "plaintext"}}
 				}}
 			}}
 		}}
@@ -577,6 +611,114 @@ using json = nlohmann::json;
 
 		if(callback)
 			callback(locations);
+	}];
+}
+
+- (void)requestHoverForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}}
+	};
+
+	[self sendRequest:@"textDocument/hover" params:params callback:^(id result) {
+		if(![result isKindOfClass:[NSDictionary class]])
+		{
+			if(callback)
+				callback(nil);
+			return;
+		}
+
+		NSDictionary* dict = (NSDictionary*)result;
+		id contents = dict[@"contents"];
+		if(!contents)
+		{
+			if(callback)
+				callback(nil);
+			return;
+		}
+
+		// contents can be: MarkedString, MarkedString[], or MarkupContent
+		// MarkedString = string | {language, value}
+		// MarkupContent = {kind, value}
+		NSString* value = nil;
+		NSString* language = nil;
+		NSString* kind = nil;
+
+		if([contents isKindOfClass:[NSString class]])
+		{
+			value = contents;
+		}
+		else if([contents isKindOfClass:[NSDictionary class]])
+		{
+			NSDictionary* contentsDict = contents;
+			if(contentsDict[@"kind"])
+			{
+				// MarkupContent: {kind: "markdown"|"plaintext", value: "..."}
+				kind = contentsDict[@"kind"];
+				value = contentsDict[@"value"];
+			}
+			else if(contentsDict[@"language"])
+			{
+				// MarkedString object: {language: "php", value: "..."}
+				language = contentsDict[@"language"];
+				value = contentsDict[@"value"];
+			}
+			else if(contentsDict[@"value"])
+			{
+				value = contentsDict[@"value"];
+			}
+		}
+		else if([contents isKindOfClass:[NSArray class]])
+		{
+			// MarkedString[] — concatenate values
+			NSMutableString* combined = [NSMutableString new];
+			for(id item in (NSArray*)contents)
+			{
+				if([item isKindOfClass:[NSString class]])
+				{
+					if(combined.length > 0) [combined appendString:@"\n\n"];
+					[combined appendString:item];
+				}
+				else if([item isKindOfClass:[NSDictionary class]])
+				{
+					NSDictionary* d = item;
+					NSString* v = d[@"value"];
+					if(v.length > 0)
+					{
+						if(combined.length > 0) [combined appendString:@"\n\n"];
+						[combined appendString:v];
+					}
+					if(!language && d[@"language"])
+						language = d[@"language"];
+				}
+			}
+			value = combined;
+		}
+
+		if(!value.length)
+		{
+			if(callback)
+				callback(nil);
+			return;
+		}
+
+		NSMutableDictionary* hover = [NSMutableDictionary new];
+		hover[@"value"] = value;
+		if(kind)
+			hover[@"kind"] = kind;
+		if(language)
+			hover[@"language"] = language;
+
+		if(callback)
+			callback(hover);
 	}];
 }
 

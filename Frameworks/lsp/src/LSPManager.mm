@@ -392,12 +392,72 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestDefinitionForURI:uri line:line character:character completion:callback];
 }
 
+- (void)requestHoverForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client requestHoverForURI:uri line:line character:character completion:callback];
+}
+
 - (BOOL)hasClientForDocument:(OakDocument*)document
 {
 	return document && _documentClients[document.identifier] != nil;
 }
 
 #pragma mark - LSPClientDelegate
+
+- (void)lspClientDidTerminate:(LSPClient*)client
+{
+	NSLog(@"[LSP] Handling server termination, cleaning up client");
+
+	// Find and remove the dead client from _clients
+	NSString* rootToRemove = nil;
+	for(NSString* root in _clients)
+	{
+		if(_clients[root] == client)
+		{
+			rootToRemove = root;
+			break;
+		}
+	}
+	if(rootToRemove)
+		[_clients removeObjectForKey:rootToRemove];
+
+	// Dissociate all documents that were using this client
+	NSMutableArray<NSUUID*>* docIdsToRemove = [NSMutableArray new];
+	for(NSUUID* docId in _documentClients)
+	{
+		if(_documentClients[docId] == client)
+			[docIdsToRemove addObject:docId];
+	}
+
+	for(NSUUID* docId in docIdsToRemove)
+	{
+		[_changeTimers[docId] invalidate];
+		[_changeTimers removeObjectForKey:docId];
+		[_documentClients removeObjectForKey:docId];
+		[_documentVersions removeObjectForKey:docId];
+		[_openDocuments removeObject:docId];
+	}
+}
 
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri
 {
