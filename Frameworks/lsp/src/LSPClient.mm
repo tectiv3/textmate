@@ -19,6 +19,8 @@ using json = nlohmann::json;
 	dispatch_queue_t _readQueue;
 	int _nextRequestId;
 	BOOL _initialized;
+	BOOL _documentFormattingProvider;
+	BOOL _documentRangeFormattingProvider;
 	NSString* _workingDirectory;
 	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
@@ -377,6 +379,14 @@ using json = nlohmann::json;
 			_initialized = YES;
 			[self logLSP:@"Server initialized successfully"];
 			[self sendNotification:@"initialized" params:json::object()];
+
+			if(msg["result"].contains("capabilities"))
+			{
+				auto const& caps = msg["result"]["capabilities"];
+				_documentFormattingProvider = caps.contains("documentFormattingProvider") && !caps["documentFormattingProvider"].is_null() && (caps["documentFormattingProvider"].is_boolean() ? caps["documentFormattingProvider"].get<bool>() : true);
+				_documentRangeFormattingProvider = caps.contains("documentRangeFormattingProvider") && !caps["documentRangeFormattingProvider"].is_null() && (caps["documentRangeFormattingProvider"].is_boolean() ? caps["documentRangeFormattingProvider"].get<bool>() : true);
+				[self logLSP:@"Capabilities: formatting=%d rangeFormatting=%d", _documentFormattingProvider, _documentRangeFormattingProvider];
+			}
 		}
 		else if(msg.contains("result"))
 		{
@@ -870,6 +880,72 @@ using json = nlohmann::json;
 
 		if(callback)
 			callback(locations);
+	}];
+}
+
+- (void)requestFormattingForURI:(NSString*)uri tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"options", {
+			{"tabSize", (int)tabSize},
+			{"insertSpaces", (bool)insertSpaces}
+		}}
+	};
+
+	[self sendRequest:@"textDocument/formatting" params:params callback:^(id result) {
+		if([result isKindOfClass:[NSArray class]])
+		{
+			if(callback)
+				callback(result);
+		}
+		else
+		{
+			if(callback)
+				callback(nil);
+		}
+	}];
+}
+
+- (void)requestRangeFormattingForURI:(NSString*)uri startLine:(NSUInteger)startLine startCharacter:(NSUInteger)startCharacter endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"range", {
+			{"start", {{"line", (int)startLine}, {"character", (int)startCharacter}}},
+			{"end", {{"line", (int)endLine}, {"character", (int)endCharacter}}}
+		}},
+		{"options", {
+			{"tabSize", (int)tabSize},
+			{"insertSpaces", (bool)insertSpaces}
+		}}
+	};
+
+	[self sendRequest:@"textDocument/rangeFormatting" params:params callback:^(id result) {
+		if([result isKindOfClass:[NSArray class]])
+		{
+			if(callback)
+				callback(result);
+		}
+		else
+		{
+			if(callback)
+				callback(nil);
+		}
 	}];
 }
 

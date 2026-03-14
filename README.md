@@ -125,8 +125,24 @@ lspInitOptions = '{ "plugins": [{ "name": "@vue/typescript-plugin", "location": 
 | `lspEnabled` | Set to `false` to disable LSP for matching files (default: `true`) |
 | `lspRootPath` | Override workspace root detection |
 | `lspInitOptions` | JSON object passed as `initializationOptions` to the server |
+| `lspFormatOnSave` | Set to `true` to format via LSP before saving (default: `false`) |
 
 Press **Opt+Tab** to trigger LSP completions. Diagnostics (errors, warnings) appear automatically in the gutter.
+
+### Formatting
+
+Format the current document via **Text → Format Code** (or **Format Selection** with an active selection). Enable format-on-save per file type:
+
+```
+# .tm_properties
+[ *.php ]
+lspFormatOnSave = true
+
+[ *.{ts,tsx,js,jsx,vue} ]
+lspFormatOnSave = true
+```
+
+The formatter requires the language server to support `textDocument/formatting`. Cursor position is preserved.
 
 # Legal
 
