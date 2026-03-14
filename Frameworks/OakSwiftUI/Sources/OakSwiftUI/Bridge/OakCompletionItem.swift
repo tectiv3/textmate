@@ -3,11 +3,14 @@ import AppKit
 @objc public class OakCompletionItem: NSObject, Identifiable {
 	public let id = UUID()
 	@objc public let label: String
-	@objc public let insertText: String?
+	@objc public private(set) var insertText: String?
 	@objc public let detail: String
 	@objc public let kind: Int
 	@objc public var icon: NSImage?
 	@objc public var isSnippet: Bool = false
+	@objc public var documentation: String?
+	@objc public var originalItem: NSDictionary?
+	@objc public var isResolved: Bool = false
 
 	@objc public var effectiveInsertText: String {
 		insertText ?? label
@@ -75,6 +78,10 @@ import AppKit
 		case 25: return "type"
 		default: return ""
 		}
+	}
+
+	@objc public func updateInsertText(_ text: String) {
+		insertText = text
 	}
 
 	@objc public init(label: String, insertText: String?, detail: String, kind: Int) {

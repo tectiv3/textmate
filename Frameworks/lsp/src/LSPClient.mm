@@ -21,6 +21,7 @@ using json = nlohmann::json;
 	BOOL _initialized;
 	BOOL _documentFormattingProvider;
 	BOOL _documentRangeFormattingProvider;
+	BOOL _completionResolveProvider;
 	NSString* _workingDirectory;
 	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
@@ -385,7 +386,9 @@ using json = nlohmann::json;
 				auto const& caps = msg["result"]["capabilities"];
 				_documentFormattingProvider = caps.contains("documentFormattingProvider") && !caps["documentFormattingProvider"].is_null() && (caps["documentFormattingProvider"].is_boolean() ? caps["documentFormattingProvider"].get<bool>() : true);
 				_documentRangeFormattingProvider = caps.contains("documentRangeFormattingProvider") && !caps["documentRangeFormattingProvider"].is_null() && (caps["documentRangeFormattingProvider"].is_boolean() ? caps["documentRangeFormattingProvider"].get<bool>() : true);
-				[self logLSP:@"Capabilities: formatting=%d rangeFormatting=%d", _documentFormattingProvider, _documentRangeFormattingProvider];
+				if(caps.contains("completionProvider") && caps["completionProvider"].contains("resolveProvider"))
+					_completionResolveProvider = caps["completionProvider"]["resolveProvider"].get<bool>();
+				[self logLSP:@"Capabilities: formatting=%d rangeFormatting=%d completionResolve=%d", _documentFormattingProvider, _documentRangeFormattingProvider, _completionResolveProvider];
 			}
 		}
 		else if(msg.contains("result"))
@@ -449,7 +452,10 @@ using json = nlohmann::json;
 				{"completion", {
 					{"dynamicRegistration", false},
 					{"completionItem", {
-						{"snippetSupport", true}
+						{"snippetSupport", true},
+						{"resolveSupport", {
+							{"properties", {"documentation", "detail", "additionalTextEdits"}}
+						}}
 					}}
 				}},
 				{"definition", {
@@ -679,11 +685,40 @@ using json = nlohmann::json;
 			if(insertTextFormat)
 				suggestion[@"insertTextFormat"] = insertTextFormat;
 
+			suggestion[@"_originalItem"] = item;
+
 			[suggestions addObject:suggestion];
 		}
 
 		if(callback)
 			callback(suggestions);
+	}];
+}
+
+- (void)resolveCompletionItem:(NSDictionary*)item completion:(void(^)(NSDictionary*))callback
+{
+	if(!_initialized || !_completionResolveProvider)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSData* jsonData = [NSJSONSerialization dataWithJSONObject:item options:0 error:nil];
+	NSString* jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+	json params = json::parse(jsonString.UTF8String, nullptr, false);
+
+	[self sendRequest:@"completionItem/resolve" params:params callback:^(id result) {
+		if([result isKindOfClass:[NSDictionary class]])
+		{
+			if(callback)
+				callback(result);
+		}
+		else
+		{
+			if(callback)
+				callback(nil);
+		}
 	}];
 }
 

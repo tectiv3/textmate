@@ -5219,6 +5219,7 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		OakCompletionItem* item = [[OakCompletionItem alloc]
 			initWithLabel:label insertText:insert detail:detail kind:kind];
 		item.isSnippet = isSnippet;
+		item.originalItem = s[@"_originalItem"];
 		[items addObject:item];
 	}
 
@@ -5441,6 +5442,47 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 - (void)completionPopupDidDismiss:(OakCompletionPopup*)popup
 {
 	_lspFilterPrefix = nil;
+}
+
+- (void)completionPopup:(OakCompletionPopup*)popup resolveItem:(OakCompletionItem*)item
+{
+	if(!item.originalItem)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	if(![[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:doc])
+		return;
+
+	__weak OakTextView* weakSelf = self;
+	[[LSPManager sharedManager] resolveCompletionItem:item.originalItem forDocument:doc completion:^(NSDictionary* resolved) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !resolved)
+			return;
+
+		NSString* documentation = nil;
+		id docValue = resolved[@"documentation"];
+		if([docValue isKindOfClass:[NSString class]])
+		{
+			documentation = docValue;
+		}
+		else if([docValue isKindOfClass:[NSDictionary class]])
+		{
+			documentation = docValue[@"value"];
+		}
+
+		NSString* newInsertText = nil;
+		if(resolved[@"insertText"])
+			newInsertText = resolved[@"insertText"];
+		else if(resolved[@"textEdit"] && [resolved[@"textEdit"] isKindOfClass:[NSDictionary class]])
+			newInsertText = resolved[@"textEdit"][@"newText"];
+
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[strongSelf->_lspCompletionPopup resolveCompletedFor:item documentation:documentation insertText:newInsertText];
+		});
+	}];
 }
 
 // ===================================

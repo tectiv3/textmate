@@ -21,6 +21,7 @@ extern NSString* const LSPProgressNotification;
 @property (nonatomic, readonly) BOOL running;
 @property (nonatomic, readonly) BOOL documentFormattingProvider;
 @property (nonatomic, readonly) BOOL documentRangeFormattingProvider;
+@property (nonatomic, readonly) BOOL completionResolveProvider;
 - (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory initOptions:(NSString*)initOptionsJSON;
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId;
 - (void)documentDidChange:(OakDocument*)document version:(int)version;
@@ -33,6 +34,7 @@ extern NSString* const LSPProgressNotification;
 - (void)requestReferencesForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback;
 - (void)requestFormattingForURI:(NSString*)uri tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback;
 - (void)requestRangeFormattingForURI:(NSString*)uri startLine:(NSUInteger)startLine startCharacter:(NSUInteger)startCharacter endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter tabSize:(NSUInteger)tabSize insertSpaces:(BOOL)insertSpaces completion:(void(^)(NSArray<NSDictionary*>*))callback;
+- (void)resolveCompletionItem:(NSDictionary*)item completion:(void(^)(NSDictionary*))callback;
 - (void)cancelRequest:(int)requestId;
 @end
 

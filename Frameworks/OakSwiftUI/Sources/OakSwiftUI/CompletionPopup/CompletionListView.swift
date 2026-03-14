@@ -5,6 +5,18 @@ struct CompletionListView: View {
 	@EnvironmentObject var theme: OakThemeEnvironment
 
 	var body: some View {
+		HStack(spacing: 0) {
+			itemsList
+			if let docs = viewModel.resolvedDocumentation, !docs.isEmpty {
+				Divider()
+				DocDetailView(documentation: docs)
+					.transition(.move(edge: .trailing).combined(with: .opacity))
+			}
+		}
+		.animation(.easeInOut(duration: 0.15), value: viewModel.resolvedDocumentation != nil)
+	}
+
+	private var itemsList: some View {
 		ScrollViewReader { proxy in
 			ScrollView(.vertical) {
 				LazyVStack(spacing: 0) {
