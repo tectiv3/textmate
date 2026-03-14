@@ -47,7 +47,7 @@
 	"^~u"      = "capitalizeWord:";
 
 	"~$\t"     = "shiftLeft:";
-	"~\t"      = "shiftRight:";
+	"~\t"      = "lspComplete:";
 	"~@["      = "indent:";
 
 	"^q"       = "reformatText:";

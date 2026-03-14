@@ -510,6 +510,12 @@ private:
 
 	std::vector<std::string> choiceVector;
 
+	// ==================
+	// = LSP Completion =
+	// ==================
+
+	NSArray<NSDictionary*>* _lspSuggestions;
+
 	// =================
 	// = Accessibility =
 	// =================
@@ -926,32 +932,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 			void request_lsp_completions (size_t index, std::string const& prefix)
 			{
-				OakTextView* tv = _self;
-				if(!tv || !tv->documentView)
-					return;
-
-				text::pos_t pos = tv->documentView->convert(index);
-				OakDocument* doc = tv.document;
-				if(!doc)
-					return;
-
-				__weak OakTextView* weakTV = tv;
-				[[LSPManager sharedManager] requestCompletionsForDocument:doc
-					line:pos.line
-					character:pos.column
-					completion:^(NSArray<NSString*>* labels) {
-						OakTextView* strongTV = weakTV;
-						if(!strongTV || labels.count == 0)
-							return;
-
-						std::vector<std::string> completions;
-						completions.reserve(labels.count);
-						for(NSString* label in labels)
-							completions.push_back(to_s(label));
-
-						strongTV->documentView->set_lsp_completions(completions);
-						[strongTV updateChoiceMenu:strongTV];
-					}];
+				// LSP completions now handled by lspComplete: action (Opt+Tab)
 			}
 
 			OakTextView* _self;
@@ -4501,6 +4482,101 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 - ACTION(complete);
 - ACTION(nextCompletion);
 - ACTION(previousCompletion);
+
+// ==================
+// = LSP Completion =
+// ==================
+
+- (void)lspComplete:(id)sender
+{
+	if(!documentView)
+		return;
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	// Walk back from caret to find word prefix
+	size_t bol = documentView->begin(pos.line);
+	std::string lineText = documentView->substr(bol, caret);
+	size_t prefixStart = lineText.size();
+	while(prefixStart > 0 && (isalnum(lineText[prefixStart-1]) || lineText[prefixStart-1] == '_'))
+		--prefixStart;
+	NSString* prefix = to_ns(lineText.substr(prefixStart));
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	// Flush pending changes so server has latest content
+	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+
+	__weak OakTextView* weakSelf = self;
+	[[LSPManager sharedManager] requestCompletionsForDocument:doc
+		line:pos.line
+		character:pos.column
+		prefix:prefix
+		completion:^(NSArray<NSDictionary*>* suggestions) {
+			OakTextView* strongSelf = weakSelf;
+			if(!strongSelf || suggestions.count == 0)
+			{
+				NSLog(@"[LSP] No completions returned");
+				return;
+			}
+
+			NSLog(@"[LSP] Got %lu completions for prefix '%@', showing menu", (unsigned long)suggestions.count, prefix);
+
+			strongSelf->_lspSuggestions = suggestions;
+			[strongSelf performSelector:@selector(showLSPCompletionMenu) withObject:nil afterDelay:0];
+		}];
+}
+
+- (void)showLSPCompletionMenu
+{
+	NSArray<NSDictionary*>* suggestions = _lspSuggestions;
+	_lspSuggestions = nil;
+
+	if(!suggestions.count || !documentView)
+		return;
+
+	NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
+	for(NSDictionary* suggestion in suggestions)
+	{
+		NSString* label = suggestion[@"label"];
+		NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:label action:@selector(lspInsertCompletion:) keyEquivalent:@""];
+		item.target = self;
+		item.representedObject = suggestion;
+		[menu addItem:item];
+	}
+
+	NSPoint caretPos = [self positionForWindowUnderCaret];
+	caretPos = [self convertPoint:[self.window convertRectFromScreen:(NSRect){ caretPos, NSZeroSize }].origin fromView:nil];
+	[menu popUpMenuPositioningItem:nil atLocation:caretPos inView:self];
+}
+
+- (void)lspInsertCompletion:(NSMenuItem*)sender
+{
+	NSDictionary* suggestion = sender.representedObject;
+	NSString* insertText = suggestion[@"insert"];
+	if(!insertText || !documentView)
+		return;
+
+	AUTO_REFRESH;
+
+	// Delete the prefix that was already typed, then insert the completion
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+	size_t bol = documentView->begin(pos.line);
+	std::string lineText = documentView->substr(bol, caret);
+	size_t prefixStart = lineText.size();
+	while(prefixStart > 0 && (isalnum(lineText[prefixStart-1]) || lineText[prefixStart-1] == '_'))
+		--prefixStart;
+	size_t prefixLen = lineText.size() - prefixStart;
+
+	// Select the prefix range and replace with completion
+	size_t from = caret - prefixLen;
+	documentView->set_ranges(ng::range_t(from, caret));
+	documentView->insert(to_s(insertText));
+}
 
 // =============
 // = Insertion =
