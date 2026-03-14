@@ -408,8 +408,6 @@ struct document_view_t : ng::buffer_api_t
 	void set_ranges (ng::ranges_t const& r) { _editor->set_selections(r); }
 	bool has_selection () const { return _editor->has_selection(); }
 	bool handle_result (std::string const& out, output::type placement, output_format::type format, output_caret::type outputCaret, ng::ranges_t const& inputRanges, std::map<std::string, std::string> environment) { return _editor->handle_result(out, placement, format, outputCaret, inputRanges, environment); }
-	void set_lsp_completions (std::vector<std::string> const& completions) { _editor->set_lsp_completions(completions); }
-
 	// ==========
 	// = Layout =
 	// ==========
@@ -928,11 +926,6 @@ static std::string shell_quote (std::vector<std::string> paths)
 			std::map<std::string, std::string> variables_for_bundle_item (bundles::item_ptr item)
 			{
 				return [_self variablesForBundleItem:item];
-			}
-
-			void request_lsp_completions (size_t index, std::string const& prefix)
-			{
-				// LSP completions now handled by lspComplete: action (Opt+Tab)
 			}
 
 			OakTextView* _self;

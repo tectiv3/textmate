@@ -157,7 +157,6 @@ namespace ng
 	{
 		virtual ~editor_delegate_t () { }
 		virtual std::map<std::string, std::string> variables_for_bundle_item (bundles::item_ptr item) = 0;
-		virtual void request_lsp_completions (size_t index, std::string const& prefix) { }
 	};
 
 	enum indent_correction_t { kIndentCorrectNever, kIndentCorrectNonEmptyLines, kIndentCorrectAlways };
@@ -198,7 +197,6 @@ namespace ng
 		bool has_selection () const                                           { return not_empty(_buffer, _selections); }
 		std::string as_string (size_t from = 0, size_t to = SIZE_T_MAX) const { return _buffer.substr(from, to != SIZE_T_MAX ? to : _buffer.size()); }
 		void sanitize_selection ();
-		void set_lsp_completions (std::vector<std::string> const& completions);
 
 		void perform_replacements (std::multimap<std::pair<size_t, size_t>, std::string> const& replacements);
 		bool handle_result (std::string const& out, output::type placement, output_format::type format, output_caret::type outputCaret, ng::ranges_t const& inputRanges, std::map<std::string, std::string> const& environment);
