@@ -60,6 +60,10 @@ namespace ng
 		std::vector< std::pair<size_t, std::string> > tmp;
 		std::vector<std::string> commandResult;
 
+		// Fire-and-forget LSP completion request; results arrive asynchronously
+		if(_delegate)
+			_delegate->request_lsp_completions(bow, prefix);
+
 		// ====================================
 		// = Run Potential Completion Command =
 		// ====================================
@@ -227,6 +231,11 @@ namespace ng
 			info.set_ranges(ng::move(_buffer, info.prefix_ranges(), kSelectionMoveToEndOfSelection));
 			_selections = info.ranges();
 		}
+	}
+
+	void editor_t::set_lsp_completions (std::vector<std::string> const& completions)
+	{
+		_completion_info.set_suggestions(completions);
 	}
 
 } /* ng */

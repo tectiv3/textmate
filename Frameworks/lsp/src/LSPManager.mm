@@ -319,6 +319,41 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[_openDocuments removeAllObjects];
 }
 
+- (void)flushPendingChangesForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	if(_changeTimers[docId])
+	{
+		[_changeTimers[docId] invalidate];
+		[self sendDidChangeForDocument:document];
+	}
+}
+
+- (void)requestCompletionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client requestCompletionForURI:uri line:line character:character completion:callback];
+}
+
 #pragma mark - LSPClientDelegate
 
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri

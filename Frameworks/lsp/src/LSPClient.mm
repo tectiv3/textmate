@@ -15,6 +15,7 @@ using json = nlohmann::json;
 	int _nextRequestId;
 	BOOL _initialized;
 	NSString* _workingDirectory;
+	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
 }
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId retryCount:(int)retryCount;
 @end
@@ -34,6 +35,7 @@ using json = nlohmann::json;
 		_readQueue = dispatch_queue_create("com.macromates.lsp.read", DISPATCH_QUEUE_SERIAL);
 		_nextRequestId = 1;
 		_initialized = NO;
+		_responseCallbacks = [NSMutableDictionary new];
 
 		_stdinPipe  = [NSPipe pipe];
 		_stdoutPipe = [NSPipe pipe];
@@ -233,12 +235,31 @@ using json = nlohmann::json;
 		{
 			auto const& err = msg["error"];
 			NSLog(@"[LSP] Error %d: %s", err["code"].get<int>(), err["message"].get<std::string>().c_str());
+
+			NSNumber* key = @(reqId);
+			void(^callback)(id) = _responseCallbacks[key];
+			if(callback)
+			{
+				[_responseCallbacks removeObjectForKey:key];
+				callback(nil);
+			}
 		}
 		else if(!_initialized && msg.contains("result"))
 		{
 			_initialized = YES;
 			NSLog(@"[LSP] Server initialized successfully");
 			[self sendNotification:@"initialized" params:json::object()];
+		}
+		else if(msg.contains("result"))
+		{
+			NSNumber* key = @(reqId);
+			void(^callback)(id) = _responseCallbacks[key];
+			if(callback)
+			{
+				[_responseCallbacks removeObjectForKey:key];
+				id result = [self convertJSON:msg["result"]];
+				callback(result);
+			}
 		}
 	}
 }
@@ -285,6 +306,12 @@ using json = nlohmann::json;
 				{"synchronization", {
 					{"didSave", true},
 					{"dynamicRegistration", false}
+				}},
+				{"completion", {
+					{"dynamicRegistration", false},
+					{"completionItem", {
+						{"snippetSupport", false}
+					}}
 				}}
 			}}
 		}}
@@ -392,6 +419,91 @@ using json = nlohmann::json;
 		}}
 	};
 	[self sendNotification:@"textDocument/didClose" params:params];
+}
+
+- (int)sendRequest:(NSString*)method params:(json)params callback:(void(^)(id))callback
+{
+	int reqId = _nextRequestId++;
+	json msg = {
+		{"jsonrpc", "2.0"},
+		{"id",      reqId},
+		{"method",  method.UTF8String},
+		{"params",  params}
+	};
+	NSLog(@"[LSP] --> %s (id=%d)", method.UTF8String, reqId);
+	if(callback)
+		_responseCallbacks[@(reqId)] = [callback copy];
+	[self sendMessage:msg];
+	return reqId;
+}
+
+- (id)convertJSON:(json const&)value
+{
+	if(value.is_null())
+		return [NSNull null];
+	if(value.is_boolean())
+		return @(value.get<bool>());
+	if(value.is_number_integer())
+		return @(value.get<int64_t>());
+	if(value.is_number_float())
+		return @(value.get<double>());
+	if(value.is_string())
+		return to_ns(value.get<std::string>());
+	if(value.is_array())
+	{
+		NSMutableArray* arr = [NSMutableArray arrayWithCapacity:value.size()];
+		for(auto const& item : value)
+			[arr addObject:[self convertJSON:item]];
+		return arr;
+	}
+	if(value.is_object())
+	{
+		NSMutableDictionary* dict = [NSMutableDictionary dictionaryWithCapacity:value.size()];
+		for(auto it = value.begin(); it != value.end(); ++it)
+			dict[to_ns(it.key())] = [self convertJSON:it.value()];
+		return dict;
+	}
+	return [NSNull null];
+}
+
+- (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSString*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(@[]);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}}
+	};
+
+	[self sendRequest:@"textDocument/completion" params:params callback:^(id result) {
+		NSMutableArray<NSString*>* labels = [NSMutableArray new];
+
+		NSArray* items = nil;
+		if([result isKindOfClass:[NSArray class]])
+		{
+			items = result;
+		}
+		else if([result isKindOfClass:[NSDictionary class]])
+		{
+			// CompletionList { items: CompletionItem[] }
+			items = result[@"items"];
+		}
+
+		for(NSDictionary* item in items)
+		{
+			NSString* label = item[@"label"];
+			if(label.length > 0)
+				[labels addObject:label];
+		}
+
+		if(callback)
+			callback(labels);
+	}];
 }
 
 - (void)shutdown
