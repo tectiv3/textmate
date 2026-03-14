@@ -5,5 +5,5 @@ textmate_framework(OakTextView)
 target_link_libraries(OakTextView PUBLIC
   BundleMenu BundlesManager Find HTMLOutput MenuBuilder OakAppKit OakCommand
   OakFilterList OakFoundation OakSystem Preferences buffer bundles cf command
-  crash document editor file io layout ns settings text theme
+  crash document editor file io layout lsp ns settings text theme
   "-framework Cocoa")

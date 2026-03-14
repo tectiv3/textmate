@@ -112,7 +112,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 		if(item)
 		{
 			res.emplace_back(item->scope_selector());
-			res.back().*(colorKey.field) = read_color(plist::get<std::string>(value));
+			res.back().*(colorKey.field) = read_color(plist::convert<std::string>(value));
 		}
 	}
 
@@ -132,7 +132,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 	if(fontNameItem)
 	{
 		res.emplace_back(fontNameItem->scope_selector());
-		res.back().font_name = plist::get<std::string>(fontNameValue);
+		res.back().font_name = plist::convert<std::string>(fontNameValue);
 	}
 
 	bundles::item_ptr fontSizeItem;
@@ -140,7 +140,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 	if(fontSizeItem)
 	{
 		res.emplace_back(fontSizeItem->scope_selector());
-		res.back().font_size = read_font_size(plist::get<std::string>(fontSizeValue));
+		res.back().font_size = read_font_size(plist::convert<std::string>(fontSizeValue));
 	}
 
 	return res;

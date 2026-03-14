@@ -1,5 +1,6 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
+#import <lsp/LSPManager.h>
 #import "OTVStatusBar.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
@@ -300,6 +301,9 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		for(NSString* key in documentKeys)
 			[oldDocument removeObserver:self forKeyPath:key];
 		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentMarksDidChangeNotification object:oldDocument];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentContentDidChangeNotification object:oldDocument];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentDidSaveNotification object:oldDocument];
+		[NSNotificationCenter.defaultCenter removeObserver:self name:OakDocumentWillCloseNotification object:oldDocument];
 	}
 
 	if(aDocument)
@@ -308,11 +312,15 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	if(_document = aDocument)
 	{
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentMarksDidChange:) name:OakDocumentMarksDidChangeNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentContentDidChange:) name:OakDocumentContentDidChangeNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentDidSave:) name:OakDocumentDidSaveNotification object:self.document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentWillClose:) name:OakDocumentWillCloseNotification object:self.document];
 		for(NSString* key in documentKeys)
 			[self.document addObserver:self forKeyPath:key options:NSKeyValueObservingOptionInitial context:nullptr];
 	}
 
 	[_textView setDocument:self.document];
+	[LSPManager.sharedManager documentDidOpen:aDocument];
 	[gutterView reloadData:self];
 	[self updateStyle];
 
@@ -790,6 +798,21 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)documentMarksDidChange:(NSNotification*)aNotification
 {
 	[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+}
+
+- (void)documentContentDidChange:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentDidChange:notification.object];
+}
+
+- (void)documentDidSave:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentDidSave:notification.object];
+}
+
+- (void)documentWillClose:(NSNotification*)notification
+{
+	[LSPManager.sharedManager documentWillClose:notification.object];
 }
 
 // ============

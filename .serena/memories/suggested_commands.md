@@ -3,24 +3,21 @@
 ## Build
 
 ```bash
-./configure                # Bootstrap (generates build.ninja)
-ninja TextMate             # Build main app
-ninja TextMate/run         # Build and run
-ninja <framework>/test     # Run tests for a framework (e.g., ninja io/test)
-ninja -t clean             # Clean everything
+make debug           # Incremental debug build
+make release         # Incremental release build
+make run             # Build debug and launch
+make clean           # Remove all build dirs
 ```
-
-Build output goes to `~/build/TextMate` (override with `builddir` env var).
 
 ## Testing
 
 ```bash
-ninja <framework>/test     # Run tests for a specific framework
+cd build-debug && ctest --output-on-failure    # Run all tests
+cd build-debug && ctest -R buffer              # Run tests for a specific framework
 ```
 
 Test framework: CxxTest (`bin/CxxTest`). Test files: `Frameworks/<name>/tests/t_*.cc` or `t_*.mm`.
 
 ## Dependencies
 
-ragel, boost, multimarkdown, mercurial (for tests), Cap'n Proto, LibreSSL, google-sparsehash, ninja
-
+cmake, ninja

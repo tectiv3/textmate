@@ -1,49 +1,49 @@
 # TextMate Build System
 
 ## Overview
-Custom build system centered on `bin/rave` (1,579 lines, Ruby), a DSL compiler that generates `build.ninja` from `.rave` declaration files.
+CMake + Ninja. The old rave/ninja system has been fully replaced.
 
-## Pipeline
+## Build Commands
+
+```bash
+make debug           # Incremental debug build (ASan enabled)
+make release         # Incremental release build (LTO, no ASan)
+make run             # Build debug and launch TextMate.app
+make clean           # Remove all build dirs
 ```
-./configure → bin/rave → build.ninja → ninja
+
+Under the hood:
+```bash
+cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+ninja -C build-debug
 ```
 
-### configure (36 lines, shell)
-1. Checks deps: capnp, ninja, ragel, multimarkdown, pgrep, pkill
-2. Validates headers/libs in /usr/local (boost, capnp, sparsehash)
-3. Creates `local.rave` with include/lib paths
-4. Calls `bin/rave -crelease -tTextMate`
+## Testing
 
-### bin/rave (Ruby)
-- Parser: recursively loads .rave files, expands variables/globs
-- Compiler plugins: CompileClang, CompileRagel, CompileCapnp, CompileXib, CompileAssetCatalog, ConvertToUTF16
-- Handles linking, bundling, code signing, notarization
-- Outputs build.ninja with depfile tracking
+```bash
+cd build-debug && ctest --output-on-failure
+```
 
-### .rave format (63 files, ~507 lines total)
-Declarative DSL: target, config, require, sources, headers, tests, frameworks, libraries, prelude, prefix, executable, files, copy, define, expand, set/add, capture, load, notarize.
-
-Example framework (buffer): 6 lines — target, headers, sources, tests.
-Example app (TextMate): 37 lines — 20+ framework deps, resources, plugins, code signing.
+Test framework: CxxTest (`bin/CxxTest`). Test files: `Frameworks/<name>/tests/t_*.cc` or `t_*.mm`.
+gen_test runner inlines test source bodies — don't compile test files separately.
 
 ## Dependencies
-- **Vendored:** Onigmo (regex), kvdb (key-value DB over sqlite3)
-- **System (Homebrew):** boost, capnp, ragel, multimarkdown, sparsehash, ninja
+
+- **Build tools:** cmake, ninja
+- **Vendored:** Onigmo (regex), kvdb (key-value DB over sqlite3), nlohmann/json
 - **System frameworks:** Cocoa, AppKit, ApplicationServices, Security, etc.
 
-## Build output (default ~/build/TextMate)
-- `_Compile/` — object files
-- `_PCH*/` — precompiled headers
-- `_Include/` — symlinks to framework headers
-- `release/` — final outputs (TextMate.app)
+## Build Quirks
 
-## Pain Points
-- Ruby dependency for bin/rave (not shipped with modern Xcode)
-- local.rave assumes /usr/local paths (breaks on ARM Homebrew /opt/homebrew)
-- Custom undocumented DSL — must read bin/rave source
-- CI/CD removed from this fork
-- bin/gen_build is legacy/dead code (just calls configure)
+- `-ObjC` linker flag required to load ObjC categories from static libraries
+- `network` framework include path is PRIVATE to avoid case-insensitive collision with Apple's Network.framework
+- `Frameworks/updater` and `Applications/bl` disabled (not needed, avoids network collision)
+- OakDebug linked unconditionally (symbols used in all build configs)
+- Plugin `.tmplugin` bundles need ad-hoc codesigning before embedding in app
+- Framework resources (icons, images, plists) must be added to TextMate app CMakeLists since static libs can't carry resources
+- CMake helpers in `cmake/TextMateHelpers.cmake`
 
-## What's Custom vs Standard
-- Custom: .rave format, bin/rave generator
-- Standard: Ninja (build tool), Clang/LLVM (compiler), code signing (xcrun)
+## Build Output
+
+- `build-debug/` — debug build (ASan enabled)
+- `build-release/` — release build (LTO)
