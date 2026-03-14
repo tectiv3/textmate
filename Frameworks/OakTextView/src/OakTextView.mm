@@ -48,6 +48,10 @@
 #import <io/exec.h>
 #import <Find/Find.h>
 
+#if HAVE_OAK_SWIFTUI
+#import <OakSwiftUI/OakSwiftUI-Swift.h>
+#endif
+
 int32_t const NSWrapColumnWindowWidth =  0;
 int32_t const NSWrapColumnAskUser     = -1;
 
@@ -512,7 +516,14 @@ private:
 	// = LSP Completion =
 	// ==================
 
+#if HAVE_OAK_SWIFTUI
+	OakCompletionPopup* _lspCompletionPopup;
+	OakThemeEnvironment* _lspTheme;
+	NSUInteger _lspInitialPrefixLength;
+	NSString* _lspFilterPrefix;
+#else
 	NSArray<NSDictionary*>* _lspSuggestions;
+#endif
 
 	// =================
 	// = Accessibility =
@@ -2237,6 +2248,48 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 - (void)realKeyDown:(NSEvent*)anEvent
 {
 	AUTO_REFRESH;
+
+#if HAVE_OAK_SWIFTUI
+	if([_lspCompletionPopup isVisible])
+	{
+		if([_lspCompletionPopup handleKeyEvent:anEvent])
+			return;
+
+		NSString* chars = [anEvent characters];
+		if(chars.length > 0)
+		{
+			unichar ch = [chars characterAtIndex:0];
+			BOOL isWordChar = isalnum(ch) || ch == '_';
+			BOOL isBackspace = [anEvent keyCode] == 51;
+
+			if(isWordChar)
+			{
+				[self oldKeyDown:anEvent];
+				_lspFilterPrefix = [_lspFilterPrefix stringByAppendingString:chars];
+				[_lspCompletionPopup updateFilter:_lspFilterPrefix];
+				return;
+			}
+			else if(isBackspace)
+			{
+				if(_lspFilterPrefix.length > 0)
+				{
+					[self oldKeyDown:anEvent];
+					_lspFilterPrefix = [_lspFilterPrefix substringToIndex:_lspFilterPrefix.length - 1];
+					[_lspCompletionPopup updateFilter:_lspFilterPrefix];
+					return;
+				}
+				[_lspCompletionPopup dismiss];
+				return [self oldKeyDown:anEvent];
+			}
+			else
+			{
+				[_lspCompletionPopup dismiss];
+				return [self oldKeyDown:anEvent];
+			}
+		}
+	}
+#endif
+
 	if(!_choiceMenu)
 		return [self oldKeyDown:anEvent];
 
@@ -4659,10 +4712,10 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	if(!doc)
 		return;
 
-	// Flush pending changes so server has latest content
 	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
 
 	__weak OakTextView* weakSelf = self;
+	NSUInteger prefixLen = prefix.length;
 	[[LSPManager sharedManager] requestCompletionsForDocument:doc
 		line:pos.line
 		character:pos.column
@@ -4670,18 +4723,63 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 		completion:^(NSArray<NSDictionary*>* suggestions) {
 			OakTextView* strongSelf = weakSelf;
 			if(!strongSelf || suggestions.count == 0)
-			{
-				NSLog(@"[LSP] No completions returned");
 				return;
-			}
 
-			NSLog(@"[LSP] Got %lu completions for prefix '%@', showing menu", (unsigned long)suggestions.count, prefix);
-
+#if HAVE_OAK_SWIFTUI
+			[strongSelf showLSPCompletionPopupWithSuggestions:suggestions prefixLength:prefixLen];
+#else
 			strongSelf->_lspSuggestions = suggestions;
 			[strongSelf performSelector:@selector(showLSPCompletionMenu) withObject:nil afterDelay:0];
+#endif
 		}];
 }
 
+#if HAVE_OAK_SWIFTUI
+- (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen
+{
+	if(!documentView)
+		return;
+
+	if(!_lspTheme)
+	{
+		_lspTheme = [[OakThemeEnvironment alloc] init];
+		NSFont* f = self.font ?: [NSFont userFixedPitchFontOfSize:12];
+		[_lspTheme applyTheme:@{
+			@"fontName": f.fontName,
+			@"fontSize": @(f.pointSize),
+			@"backgroundColor": [NSColor textBackgroundColor],
+			@"foregroundColor": [NSColor textColor],
+		}];
+	}
+
+	if(!_lspCompletionPopup)
+	{
+		_lspCompletionPopup = [[OakCompletionPopup alloc] initWithTheme:_lspTheme];
+		_lspCompletionPopup.delegate = (id<OakCompletionPopupDelegate>)self;
+	}
+
+	NSMutableArray<OakCompletionItem*>* items = [NSMutableArray arrayWithCapacity:suggestions.count];
+	for(NSDictionary* s in suggestions)
+	{
+		OakCompletionItem* item = [[OakCompletionItem alloc]
+			initWithLabel:s[@"label"] ?: s[@"display"] ?: @""
+			   insertText:s[@"insert"]
+			       detail:s[@"detail"] ?: @""
+			         kind:[s[@"kind"] intValue]];
+		[items addObject:item];
+	}
+
+	_lspInitialPrefixLength = prefixLen;
+	_lspFilterPrefix = @"";
+
+	CGRect caretRect = documentView->rect_at_index(documentView->ranges().last().last.index);
+	NSPoint caretPoint = NSMakePoint(NSMinX(caretRect), NSMaxY(caretRect) + 4);
+
+	[_lspCompletionPopup showIn:self at:caretPoint items:items];
+}
+#endif
+
+#if !HAVE_OAK_SWIFTUI
 - (void)showLSPCompletionMenu
 {
 	NSArray<NSDictionary*>* suggestions = _lspSuggestions;
@@ -4714,7 +4812,6 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	AUTO_REFRESH;
 
-	// Delete the prefix that was already typed, then insert the completion
 	size_t caret = documentView->ranges().last().last.index;
 	text::pos_t pos = documentView->convert(caret);
 	size_t bol = documentView->begin(pos.line);
@@ -4724,11 +4821,11 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 		--prefixStart;
 	size_t prefixLen = lineText.size() - prefixStart;
 
-	// Select the prefix range and replace with completion
 	size_t from = caret - prefixLen;
 	documentView->set_ranges(ng::range_t(from, caret));
 	documentView->insert(to_s(insertText));
 }
+#endif
 
 // =============
 // = Insertion =
@@ -4888,4 +4985,31 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 	[self.window presentError:anError modalForWindow:self.window delegate:nil didPresentSelector:NULL contextInfo:nullptr];
 	return NO;
 }
+
+#if HAVE_OAK_SWIFTUI
+// ===================================
+// = OakCompletionPopupDelegate =
+// ===================================
+
+- (void)completionPopup:(OakCompletionPopup*)popup didSelectItem:(OakCompletionItem*)item
+{
+	if(!documentView)
+		return;
+
+	AUTO_REFRESH;
+
+	size_t caret = documentView->ranges().last().last.index;
+	NSUInteger deleteCount = _lspInitialPrefixLength + _lspFilterPrefix.length;
+	size_t from = caret - deleteCount;
+	documentView->set_ranges(ng::range_t(from, caret));
+	documentView->insert(to_s(item.effectiveInsertText));
+
+	_lspFilterPrefix = nil;
+}
+
+- (void)completionPopupDidDismiss:(OakCompletionPopup*)popup
+{
+	_lspFilterPrefix = nil;
+}
+#endif
 @end
