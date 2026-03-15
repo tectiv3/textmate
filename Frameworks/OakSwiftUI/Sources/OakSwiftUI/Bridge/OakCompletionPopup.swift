@@ -11,6 +11,7 @@ import Combine
 	private let theme: OakThemeEnvironment
 	private static let docPanelWidth: CGFloat = 262
 	private var cancellables = Set<AnyCancellable>()
+	private var listHeight: CGFloat = 0
 
 	@objc public init(theme: OakThemeEnvironment) {
 		self.theme = theme
@@ -42,6 +43,7 @@ import Combine
 		let rowHeight = max(theme.fontSize * 1.8, 22)
 		let itemCount = min(items.count, 12)
 		let height = CGFloat(itemCount) * rowHeight + 8
+		self.listHeight = height
 		let detailFont = NSFont.systemFont(ofSize: max(theme.fontSize - 2, 9))
 		let maxLabelWidth = items.prefix(50).map { ($0.label as NSString).size(withAttributes: [.font: theme.font]).width }.max() ?? 200
 		let maxDetailWidth = items.prefix(50).map { ($0.detail as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0
@@ -74,6 +76,13 @@ import Combine
 		parentView.window?.addChildWindow(panel, ordered: .above)
 		self.window = panel
 
+		if supportsResolve {
+			vm.$resolvedDocumentation
+				.receive(on: DispatchQueue.main)
+				.sink { [weak self] _ in self?.resizeForDocs() }
+				.store(in: &cancellables)
+		}
+
 		vm.scheduleResolve()
 	}
 
@@ -93,12 +102,42 @@ import Combine
 		guard let w = window, let vm = viewModel else { return }
 		let rowHeight = max(theme.fontSize * 1.8, 22)
 		let itemCount = min(vm.filteredItems.count, 12)
-		let newHeight = CGFloat(itemCount) * rowHeight + 8
+		let newListHeight = CGFloat(itemCount) * rowHeight + 8
+		self.listHeight = newListHeight
+
+		let targetHeight = supportsResolve ? heightForDocs(listHeight: newListHeight) : newListHeight
 		var frame = w.frame
-		let delta = newHeight - frame.height
+		let delta = targetHeight - frame.height
 		frame.origin.y -= delta
-		frame.size.height = newHeight
+		frame.size.height = targetHeight
 		w.setFrame(frame, display: true, animate: false)
+	}
+
+	private func resizeForDocs() {
+		guard let w = window else { return }
+		let targetHeight = heightForDocs(listHeight: listHeight)
+		var frame = w.frame
+		let delta = targetHeight - frame.height
+		guard abs(delta) > 1 else { return }
+		frame.origin.y -= delta
+		frame.size.height = targetHeight
+		w.setFrame(frame, display: true, animate: false)
+	}
+
+	private func heightForDocs(listHeight: CGFloat) -> CGFloat {
+		guard let vm = viewModel, let docs = vm.resolvedDocumentation, docs.length > 0 else {
+			return listHeight
+		}
+
+		let maxScreenHeight = (NSScreen.main?.visibleFrame.height ?? 800) * 0.4
+		let docWidth = Self.docPanelWidth - 20 // padding
+		let boundingRect = docs.boundingRect(
+			with: NSSize(width: docWidth, height: .greatestFiniteMagnitude),
+			options: [.usesLineFragmentOrigin, .usesFontLeading]
+		)
+		let docHeight = ceil(boundingRect.height) + 30 // padding + divider
+
+		return min(max(listHeight, docHeight), maxScreenHeight)
 	}
 
 	@objc public func handleKeyEvent(_ event: NSEvent) -> Bool {

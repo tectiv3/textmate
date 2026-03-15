@@ -28,8 +28,14 @@ import SwiftUI
 
 		let hostingView = NSHostingView(rootView: view)
 
+		// ~22pt per reference row + ~28pt per file group header, capped at 40% of screen
+		let groupCount = Set(items.map { $0.filePath }).count
+		let contentHeight = CGFloat(items.count) * 22 + CGFloat(groupCount) * 28 + 40
+		let maxHeight = (NSScreen.main?.visibleFrame.height ?? 800) * 0.4
+		let height = min(max(contentHeight, 150), maxHeight)
+
 		let p = NSPanel(
-			contentRect: NSRect(x: 0, y: 0, width: 500, height: 350),
+			contentRect: NSRect(x: 0, y: 0, width: 500, height: height),
 			styleMask: [.titled, .closable, .resizable, .utilityWindow],
 			backing: .buffered,
 			defer: false

@@ -48,20 +48,19 @@ private let kFrameKey = "OakLSPLogWindow.frame"
 			}
 
 			frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
-			frameObservers = [
-				NotificationCenter.default.addObserver(
-					forName: NSWindow.didResizeNotification, object: window, queue: .main
-				) { [weak window] _ in
-					guard let window, window.isVisible else { return }
-					UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: kFrameKey)
-				},
-				NotificationCenter.default.addObserver(
-					forName: NSWindow.didMoveNotification, object: window, queue: .main
-				) { [weak window] _ in
-					guard let window, window.isVisible else { return }
-					UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: kFrameKey)
+			for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+				let token = NotificationCenter.default.addObserver(
+					forName: name, object: window, queue: .main
+				) { _ in
+					// queue: .main guarantees main thread; re-fetch window from self
+					// to avoid capturing MainActor-isolated refs in @Sendable closure
+					DispatchQueue.main.async { [weak self] in
+						guard let w = self?.windowController?.window, w.isVisible else { return }
+						UserDefaults.standard.set(NSStringFromRect(w.frame), forKey: kFrameKey)
+					}
 				}
-			]
+				frameObservers.append(token)
+			}
 
 			windowController = NSWindowController(window: window)
 		}

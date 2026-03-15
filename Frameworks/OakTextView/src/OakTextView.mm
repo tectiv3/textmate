@@ -5169,11 +5169,11 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 				return;
 			}
 
-			[strongSelf showLSPCompletionPopupWithSuggestions:suggestions prefixLength:prefixLen];
+			[strongSelf showLSPCompletionPopupWithSuggestions:suggestions prefixLength:prefixLen autoInsertSingle:isExplicitTrigger];
 		}];
 }
 
-- (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen
+- (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen autoInsertSingle:(BOOL)autoInsertSingle
 {
 	if(!documentView)
 		return;
@@ -5273,6 +5273,31 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 
 	_lspInitialPrefixLength = prefixLen;
 	_lspFilterPrefix = @"";
+
+	// Auto-insert when only one result on explicit trigger
+	if(autoInsertSingle && items.count == 1)
+	{
+		OakCompletionItem* item = items.firstObject;
+
+		AUTO_REFRESH;
+		size_t caret = documentView->ranges().last().last.index;
+		NSUInteger deleteCount = _lspInitialPrefixLength;
+		size_t from = caret - deleteCount;
+		documentView->set_ranges(ng::range_t(from, caret));
+
+		if(item.isSnippet)
+		{
+			documentView->insert("");
+			[self insertSnippetWithOptions:@{ @"content": item.effectiveInsertText }];
+		}
+		else
+		{
+			documentView->insert(to_s(item.effectiveInsertText));
+		}
+
+		_lspFilterPrefix = nil;
+		return;
+	}
 
 	CGRect caretRect = documentView->rect_at_index(documentView->ranges().last().last.index);
 	NSPoint caretPoint = NSMakePoint(NSMinX(caretRect), NSMaxY(caretRect) + 4);
