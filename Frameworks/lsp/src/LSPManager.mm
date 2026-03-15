@@ -616,6 +616,13 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	return client && client.codeActionProvider;
 }
 
+- (BOOL)serverSupportsCodeActionResolveForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.codeActionResolveProvider;
+}
+
 - (void)requestCodeActionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter completion:(void(^)(NSArray<NSDictionary*>*))callback
 {
 	NSUUID* docId = document.identifier;

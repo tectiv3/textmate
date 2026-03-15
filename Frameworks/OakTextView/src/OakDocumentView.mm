@@ -41,6 +41,10 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	NSMutableArray* bottomAuxiliaryViews;
 
 	IBOutlet NSPanel* tabSizeSelectorPanel;
+
+	NSUInteger _cursorLine;
+	BOOL _cursorLineHasActions;
+	NSUInteger _probeGeneration;
 }
 @property (nonatomic, readonly) OTVStatusBar* statusBar;
 @property (nonatomic) SymbolChooser* symbolChooser;
@@ -55,6 +59,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	{
 		self.accessibilityRole  = NSAccessibilityGroupRole;
 		self.accessibilityLabel = @"Editor";
+
+		_cursorLine = NSNotFound;
 
 		_textView = [[OakTextView alloc] initWithFrame:NSZeroRect];
 		_textView.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
@@ -671,6 +677,67 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (GVLineRecord)lineFragmentForLine:(NSUInteger)aLine column:(NSUInteger)aColumn { return [_textView lineFragmentForLine:aLine column:aColumn]; }
 
 // =========================
+// = Cursor Line Tracking  =
+// =========================
+
+- (void)updateCursorLine:(NSUInteger)line
+{
+	if(_cursorLine == line)
+		return;
+
+	NSUInteger oldLine = _cursorLine;
+	_cursorLine = line;
+	_cursorLineHasActions = NO;
+	++_probeGeneration;
+
+	// Redraw gutter for old line (remove lightbulb) and new line
+	if(oldLine != NSNotFound || line != NSNotFound)
+		[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+
+	// Check if new cursor line has diagnostics — if so, probe server for actions
+	if(line == NSNotFound)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	auto const settings = settings_for_path(doc.virtualPath ? to_s(doc.virtualPath) : to_s(doc.path), to_s(doc.fileType), to_s(doc.directory ?: @""));
+	if(!settings.get("lspCodeActions", true))
+		return;
+
+	LSPManager* lsp = [LSPManager sharedManager];
+	if(![lsp serverSupportsCodeActionsForDocument:doc])
+		return;
+
+	__block BOOL hasDiagnostic = NO;
+	[doc enumerateBookmarksAtLine:line block:^(text::pos_t const& pos, NSString* type, NSString* payload){
+		if([type isEqualToString:@"error"] || [type isEqualToString:@"warning"] || [type isEqualToString:@"note"])
+			hasDiagnostic = YES;
+	}];
+
+	if(!hasDiagnostic)
+		return;
+
+	// Probe server for available actions on this line
+	NSUInteger generation = _probeGeneration;
+	__weak OakDocumentView* weakSelf = self;
+	[lsp requestCodeActionsForDocument:doc
+		line:line character:0
+		endLine:line endCharacter:0
+		completion:^(NSArray<NSDictionary*>* actions) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				OakDocumentView* strongSelf = weakSelf;
+				if(!strongSelf || strongSelf->_probeGeneration != generation)
+					return;
+				strongSelf->_cursorLineHasActions = actions.count > 0;
+				if(strongSelf->_cursorLineHasActions)
+					[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:strongSelf];
+			});
+		}];
+}
+
+// =========================
 // = GutterView DataSource =
 // =========================
 
@@ -683,6 +750,18 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
 	{
+		// Show lightbulb only when server confirmed actions are available for this line
+		if(lineNumber == _cursorLine && _cursorLineHasActions)
+		{
+			NSImage* img = [NSImage imageWithSystemSymbolName:@"lightbulb.fill" accessibilityDescription:@"Code Actions"];
+			if(img)
+			{
+				CGFloat size = floor((self.lineHeight - 1) / 2) * 2 + 1;
+				NSImageSymbolConfiguration* config = [NSImageSymbolConfiguration configurationWithPointSize:size * 0.5 weight:NSFontWeightRegular];
+				return [img imageWithSymbolConfiguration:config];
+			}
+		}
+
 		__block std::map<size_t, NSString*> gutterImageName;
 
 		[self.document enumerateBookmarksAtLine:lineNumber block:^(text::pos_t const& pos, NSString* type, NSString* payload){
@@ -744,6 +823,13 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 {
 	if([columnIdentifier isEqualToString:kBookmarksColumnIdentifier])
 	{
+		// Lightbulb click triggers code actions
+		if(lineNumber == _cursorLine && _cursorLineHasActions)
+		{
+			[_textView lspCodeActions:self];
+			return;
+		}
+
 		__block std::vector<text::pos_t> bookmarks;
 		__block NSMutableArray* content = [NSMutableArray array];
 

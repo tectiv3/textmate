@@ -544,8 +544,7 @@ private:
 	text::pos_t _renamePos;
 
 	// = LSP Code Actions =
-
-	int _lspCodeActionsRequestId;
+	BOOL _didApplyCodeActionEdit;
 
 	// =================
 	// = Accessibility =
@@ -3725,6 +3724,15 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	isUpdatingSelection = YES;
 	[self setSelectionString:[NSString stringWithCxxString:withoutCarry]];
 	isUpdatingSelection = NO;
+
+	// Notify containing OakDocumentView so the gutter lightbulb can track cursor line
+	if(!documentView->ranges().empty())
+	{
+		text::pos_t caretPos = documentView->convert(documentView->ranges().last().last.index);
+		OakDocumentView* docView = (OakDocumentView*)[self enclosingScrollView].superview;
+		if([docView respondsToSelector:@selector(updateCursorLine:)])
+			[docView updateCursorLine:caretPos.line];
+	}
 }
 
 - (void)updateSymbol
@@ -5364,11 +5372,15 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 
 		if(isCurrentDocument && documentView)
 		{
-			// Apply to current buffer — handle_result creates a single undo group
 			ng::ranges_t capturedRanges = documentView->ranges();
 			std::string result = applyTextEdits(*documentView, edits);
 			AUTO_REFRESH;
 			documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+
+			// Force lightbulb re-evaluation after edit
+			OakDocumentView* docView = (OakDocumentView*)[self enclosingScrollView].superview;
+			if([docView respondsToSelector:@selector(updateCursorLine:)])
+				[docView updateCursorLine:NSNotFound];
 		}
 		else
 		{
@@ -5430,10 +5442,25 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 
 - (void)handleApplyEditRequest:(NSNotification*)notification
 {
-	NSDictionary* workspaceEdit = notification.userInfo[@"workspaceEdit"];
 	int requestId = [notification.userInfo[@"requestId"] intValue];
 	LSPClient* client = notification.userInfo[@"client"];
 
+	// Deduplicate: only the first observer to see this requestId handles it
+	static int lastHandledRequestId = -1;
+	if(requestId == lastHandledRequestId)
+		return;
+	lastHandledRequestId = requestId;
+
+	// Guard against double-apply: if performCodeAction already applied an edit
+	// directly, the server may also send workspace/applyEdit with the same content
+	if(_didApplyCodeActionEdit)
+	{
+		_didApplyCodeActionEdit = NO;
+		[client respondToApplyEdit:requestId applied:YES failureReason:nil];
+		return;
+	}
+
+	NSDictionary* workspaceEdit = notification.userInfo[@"workspaceEdit"];
 	BOOL applied = NO;
 	if(workspaceEdit)
 	{
@@ -5459,10 +5486,7 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 
 	LSPManager* lsp = [LSPManager sharedManager];
 	if(![lsp serverSupportsCodeActionsForDocument:doc])
-	{
-		NSBeep();
 		return;
-	}
 
 	ng::range_t sel = documentView->ranges().last();
 	text::pos_t startPos = documentView->convert(sel.min().index);
@@ -5480,10 +5504,7 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 				if(!strongSelf)
 					return;
 				if(!actions || actions.count == 0)
-				{
-					NSBeep();
 					return;
-				}
 				[strongSelf showCodeActionsMenu:actions];
 			});
 		}];
@@ -5492,6 +5513,7 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 - (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions
 {
 	NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Code Actions"];
+	menu.autoenablesItems = NO;
 
 	NSMutableArray* quickFixes = [NSMutableArray array];
 	NSMutableArray* refactors  = [NSMutableArray array];
@@ -5502,11 +5524,10 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	{
 		// Handle bare Command objects (no kind, title comes from command string)
 		NSMutableDictionary* item = [NSMutableDictionary dictionaryWithDictionary:action];
-		if(!item[@"title"] && item[@"command"] && [item[@"command"] isKindOfClass:[NSString class]])
-		{
-			item[@"title"] = item[@"command"];
+		// Bare Command objects have "command" as a string at top level (not nested in a dict)
+		// and lack "kind" and "edit" — they're just {title, command, arguments}
+		if(!item[@"kind"] && !item[@"edit"] && item[@"command"] && [item[@"command"] isKindOfClass:[NSString class]])
 			item[@"_isCommand"] = @YES;
-		}
 
 		NSString* kind = item[@"kind"];
 		if([kind hasPrefix:@"quickfix"])
@@ -5563,7 +5584,13 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	addSection(menu, @"Source", sources);
 	addSection(menu, nil, other);
 
-	[menu popUpMenuPositioningItem:nil atLocation:[self positionForWindowUnderCaret] inView:self];
+	NSPoint pos = [self positionForWindowUnderCaret];
+	pos = [self convertPoint:[self.window convertRectFromScreen:(NSRect){ pos, NSZeroSize }].origin fromView:nil];
+	[menu popUpMenuPositioningItem:nil atLocation:pos inView:self];
+
+	// Menu is modal and blocks flagsChanged: — sync cursor state with current modifiers
+	NSEventModifierFlags modifiers = [NSEvent modifierFlags] & (NSEventModifierFlagOption | NSEventModifierFlagCommand);
+	self.showDefinitionCursor = (modifiers == NSEventModifierFlagCommand) && [[LSPManager sharedManager] hasClientForDocument:self.document];
 }
 
 - (void)performCodeAction:(NSMenuItem*)sender
@@ -5585,6 +5612,7 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	// Apply edit immediately if present, then execute optional command
 	if(action[@"edit"])
 	{
+		_didApplyCodeActionEdit = YES;
 		[self applyWorkspaceEdit:action[@"edit"]];
 		if(action[@"command"] && [action[@"command"] isKindOfClass:[NSDictionary class]])
 		{
@@ -5594,22 +5622,34 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 		return;
 	}
 
-	// No edit present — resolve the action first (server may fill in edit/command)
-	__weak OakTextView* weakSelf = self;
-	[lsp resolveCodeAction:action forDocument:doc completion:^(NSDictionary* resolved) {
-		dispatch_async(dispatch_get_main_queue(), ^{
-			OakTextView* strongSelf = weakSelf;
-			if(!strongSelf)
-				return;
-			if(resolved[@"edit"])
-				[strongSelf applyWorkspaceEdit:resolved[@"edit"]];
-			if(resolved[@"command"] && [resolved[@"command"] isKindOfClass:[NSDictionary class]])
-			{
-				NSDictionary* cmd = resolved[@"command"];
-				[lsp executeCommand:cmd[@"command"] arguments:cmd[@"arguments"] forDocument:doc completion:nil];
-			}
-		});
-	}];
+	// No edit present — try resolve if server supports it
+	if([lsp serverSupportsCodeActionResolveForDocument:doc])
+	{
+		__weak OakTextView* weakSelf = self;
+		[lsp resolveCodeAction:action forDocument:doc completion:^(NSDictionary* resolved) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				OakTextView* strongSelf = weakSelf;
+				if(!strongSelf)
+					return;
+				if(resolved[@"edit"])
+				{
+					strongSelf->_didApplyCodeActionEdit = YES;
+					[strongSelf applyWorkspaceEdit:resolved[@"edit"]];
+				}
+				if(resolved[@"command"] && [resolved[@"command"] isKindOfClass:[NSDictionary class]])
+				{
+					NSDictionary* cmd = resolved[@"command"];
+					[lsp executeCommand:cmd[@"command"] arguments:cmd[@"arguments"] forDocument:doc completion:nil];
+				}
+			});
+		}];
+	}
+	else if(action[@"command"] && [action[@"command"] isKindOfClass:[NSDictionary class]])
+	{
+		// No edit, no resolve — just execute the command directly
+		NSDictionary* cmd = action[@"command"];
+		[lsp executeCommand:cmd[@"command"] arguments:cmd[@"arguments"] forDocument:doc completion:nil];
+	}
 }
 
 // = LSP Formatting =
