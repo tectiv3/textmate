@@ -15,4 +15,5 @@
 - (IBAction)showSymbolChooser:(id)sender;
 
 - (void)updateCursorLine:(NSUInteger)line;
+- (void)invalidateCodeActionProbe;
 @end

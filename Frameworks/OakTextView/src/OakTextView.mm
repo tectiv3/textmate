@@ -5372,15 +5372,61 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 
 		if(isCurrentDocument && documentView)
 		{
-			ng::ranges_t capturedRanges = documentView->ranges();
-			std::string result = applyTextEdits(*documentView, edits);
-			AUTO_REFRESH;
-			documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+			// Sort edits in reverse order (bottom-to-top) for offset-safe application
+			NSArray* sorted = [edits sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* a, NSDictionary* b) {
+				NSInteger aLine = [a[@"range"][@"start"][@"line"] integerValue];
+				NSInteger bLine = [b[@"range"][@"start"][@"line"] integerValue];
+				if(aLine != bLine)
+					return bLine < aLine ? NSOrderedAscending : NSOrderedDescending;
+				NSInteger aChar = [a[@"range"][@"start"][@"character"] integerValue];
+				NSInteger bChar = [b[@"range"][@"start"][@"character"] integerValue];
+				return bChar < aChar ? NSOrderedAscending : NSOrderedDescending;
+			}];
 
-			// Force lightbulb re-evaluation after edit
+			// Compute bounding range of all edits
+			size_t minOffset = documentView->size(), maxOffset = 0;
+			for(NSDictionary* edit in sorted)
+			{
+				NSDictionary* start = edit[@"range"][@"start"];
+				NSDictionary* end   = edit[@"range"][@"end"];
+				size_t from = documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+				size_t to   = documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+				minOffset = std::min(minOffset, std::min(from, to));
+				maxOffset = std::max(maxOffset, std::max(from, to));
+			}
+			minOffset = std::min(minOffset, documentView->size());
+			maxOffset = std::min(maxOffset, documentView->size());
+
+			// Extract the bounding region and apply edits within it
+			std::string content = documentView->substr(minOffset, maxOffset);
+			for(NSDictionary* edit in sorted)
+			{
+				NSDictionary* start = edit[@"range"][@"start"];
+				NSDictionary* end   = edit[@"range"][@"end"];
+				NSString* newText   = edit[@"newText"];
+				if(!start || !end || !newText)
+					continue;
+
+				size_t from = documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+				size_t to   = documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+				from = std::min(from, documentView->size());
+				to   = std::min(to, documentView->size());
+				if(from > to) std::swap(from, to);
+
+				// Adjust to be relative to bounding range
+				content.replace(from - minOffset, to - from, to_s(newText));
+			}
+
+			// Use replace_input so cursor outside edit range shifts naturally
+			ng::ranges_t capturedRanges = documentView->ranges();
+			ng::ranges_t inputRange(ng::range_t(minOffset, maxOffset));
+			AUTO_REFRESH;
+			documentView->handle_result(content, output::replace_input, output_format::text, output_caret::interpolate_by_line, inputRange, {});
+
+			// Clear lightbulb — diagnostics are stale until server re-publishes
 			OakDocumentView* docView = (OakDocumentView*)[self enclosingScrollView].superview;
-			if([docView respondsToSelector:@selector(updateCursorLine:)])
-				[docView updateCursorLine:NSNotFound];
+			if([docView respondsToSelector:@selector(invalidateCodeActionProbe)])
+				[docView invalidateCodeActionProbe];
 		}
 		else
 		{

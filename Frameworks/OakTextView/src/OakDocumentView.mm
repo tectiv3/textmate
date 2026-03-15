@@ -680,6 +680,13 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 // = Cursor Line Tracking  =
 // =========================
 
+- (void)invalidateCodeActionProbe
+{
+	_cursorLineHasActions = NO;
+	++_probeGeneration;
+	[NSNotificationCenter.defaultCenter postNotificationName:GVColumnDataSourceDidChange object:self];
+}
+
 - (void)updateCursorLine:(NSUInteger)line
 {
 	if(_cursorLine == line)
