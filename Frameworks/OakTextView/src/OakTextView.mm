@@ -4146,7 +4146,10 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	// LSP hover: only trigger when mouse is directly over a word character
 	if([[LSPManager sharedManager] hasClientForDocument:self.document])
 	{
-		if(index != _lspHoverIndex)
+		settings_t const settings = settings_for_path(to_s(_document.virtualPath ?: _document.path), to_s(_document.fileType), to_s(_document.directory ?: [_document.path stringByDeletingLastPathComponent]));
+		bool lspHover = settings.get("lspHover", true);
+
+		if(lspHover && index != _lspHoverIndex)
 		{
 			_lspHoverIndex = index;
 			[self cancelLSPHoverRequest];
@@ -4162,6 +4165,11 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 					[weakSelf lspRequestHoverAtIndex:index];
 				}];
 			}
+		}
+		else if(!lspHover)
+		{
+			[self cancelLSPHoverRequest];
+			[_lspHoverTooltip dismiss];
 		}
 	}
 }

@@ -1,12 +1,15 @@
 import AppKit
 import SwiftUI
 
+private let kFrameKey = "OakLSPLogWindow.frame"
+
 @MainActor
 @objc public class OakLogPanel: NSObject {
 	@objc public static let shared = OakLogPanel()
 
 	private let model = LogViewModel()
 	private var windowController: NSWindowController?
+	private var frameObservers: [Any] = []
 
 	private override init() {}
 
@@ -28,17 +31,37 @@ import SwiftUI
 
 	private func showPanel() {
 		if windowController == nil || windowController?.window == nil {
-			let view = LogView(model: model)
-			let hostingController = NSHostingController(rootView: view)
+			let hostingView = NSHostingView(rootView: LogView(model: model))
 
 			let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
 			                      styleMask: [.titled, .closable, .miniaturizable, .resizable],
 			                      backing: .buffered, defer: false)
 			window.title = "LSP Log"
 			window.isReleasedWhenClosed = false
-			window.contentViewController = hostingController
+			window.contentView = hostingView
 			window.contentMinSize = NSSize(width: 400, height: 300)
-			window.setFrameAutosaveName("OakLSPLogWindow")
+
+			if let frameString = UserDefaults.standard.string(forKey: kFrameKey) {
+				window.setFrame(NSRectFromString(frameString), display: false)
+			} else {
+				window.center()
+			}
+
+			frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
+			frameObservers = [
+				NotificationCenter.default.addObserver(
+					forName: NSWindow.didResizeNotification, object: window, queue: .main
+				) { [weak window] _ in
+					guard let window, window.isVisible else { return }
+					UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: kFrameKey)
+				},
+				NotificationCenter.default.addObserver(
+					forName: NSWindow.didMoveNotification, object: window, queue: .main
+				) { [weak window] _ in
+					guard let window, window.isVisible else { return }
+					UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: kFrameKey)
+				}
+			]
 
 			windowController = NSWindowController(window: window)
 		}
