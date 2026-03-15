@@ -36,6 +36,8 @@ static NSString* fileFromParams (json const& params)
 	BOOL _documentRangeFormattingProvider;
 	BOOL _completionResolveProvider;
 	BOOL _renameProvider;
+	BOOL _codeActionProvider;
+	BOOL _codeActionResolveProvider;
 	NSString* _workingDirectory;
 	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
@@ -352,14 +354,38 @@ static NSString* fileFromParams (json const& params)
 
 		if(msg.contains("id"))
 		{
-			// Server-initiated request — must reply or server will hang
-			[self postLog:[NSString stringWithFormat:@"%s (id=%s)", method.c_str(), msg["id"].dump().c_str()] source:@"event"];
-			json response = {
-				{"jsonrpc", "2.0"},
-				{"id",      msg["id"]},
-				{"result",  json::object()}
-			};
-			[self sendMessage:response];
+			int requestId = msg["id"].get<int>();
+			[self postLog:[NSString stringWithFormat:@"%s (id=%d)", method.c_str(), requestId] source:@"event"];
+
+			if(method == "workspace/applyEdit")
+			{
+				NSDictionary* edit = nil;
+				if(msg["params"].contains("edit"))
+					edit = [self convertJSON:msg["params"]["edit"]];
+
+				if(edit && [_delegate respondsToSelector:@selector(lspClient:didReceiveApplyEditRequest:requestId:)])
+				{
+					[_delegate lspClient:self didReceiveApplyEditRequest:edit requestId:requestId];
+				}
+				else
+				{
+					json response = {
+						{"jsonrpc", "2.0"},
+						{"id",      requestId},
+						{"result",  {{"applied", false}, {"failureReason", "Not supported"}}}
+					};
+					[self sendMessage:response];
+				}
+			}
+			else
+			{
+				json response = {
+					{"jsonrpc", "2.0"},
+					{"id",      requestId},
+					{"result",  json::object()}
+				};
+				[self sendMessage:response];
+			}
 		}
 		else if(method == "textDocument/publishDiagnostics")
 		{
@@ -436,7 +462,10 @@ static NSString* fileFromParams (json const& params)
 				if(caps.contains("completionProvider") && caps["completionProvider"].contains("resolveProvider"))
 					_completionResolveProvider = caps["completionProvider"]["resolveProvider"].get<bool>();
 				_renameProvider = caps.contains("renameProvider") && !caps["renameProvider"].is_null() && (caps["renameProvider"].is_boolean() ? caps["renameProvider"].get<bool>() : true);
-				[logMsg appendFormat:@"  formatting=%d rangeFormatting=%d completionResolve=%d rename=%d", _documentFormattingProvider, _documentRangeFormattingProvider, _completionResolveProvider, _renameProvider];
+				_codeActionProvider = caps.contains("codeActionProvider") && !caps["codeActionProvider"].is_null() && (caps["codeActionProvider"].is_boolean() ? caps["codeActionProvider"].get<bool>() : true);
+				if(caps.contains("codeActionProvider") && !caps["codeActionProvider"].is_boolean() && caps["codeActionProvider"].is_object() && caps["codeActionProvider"].contains("resolveProvider"))
+					_codeActionResolveProvider = caps["codeActionProvider"]["resolveProvider"].get<bool>();
+				[logMsg appendFormat:@"  formatting=%d rangeFormatting=%d completionResolve=%d rename=%d codeAction=%d", _documentFormattingProvider, _documentRangeFormattingProvider, _completionResolveProvider, _renameProvider, _codeActionProvider];
 			}
 			[self postLog:logMsg source:@"response"];
 		}
@@ -493,6 +522,20 @@ static NSString* fileFromParams (json const& params)
 					count = result["documentChanges"].size();
 				[logMsg appendFormat:@"  %lu edit%s", (unsigned long)count, count == 1 ? "" : "s"];
 			}
+			else if([method isEqualToString:@"textDocument/codeAction"])
+			{
+				size_t count = result.is_array() ? result.size() : 0;
+				[logMsg appendFormat:@"  %lu action%s", (unsigned long)count, count == 1 ? "" : "s"];
+			}
+			else if([method isEqualToString:@"codeAction/resolve"])
+			{
+				if(result.contains("title"))
+					[logMsg appendFormat:@"  \"%s\"", result["title"].get<std::string>().c_str()];
+			}
+			else if([method isEqualToString:@"workspace/executeCommand"])
+			{
+				[logMsg appendString:@"  done"];
+			}
 
 			[self postLog:logMsg source:@"response"];
 
@@ -519,17 +562,38 @@ static NSString* fileFromParams (json const& params)
 
 	for(auto const& diag : diagnostics)
 	{
-		int line = diag["range"]["start"]["line"].get<int>();
-		int col  = diag["range"]["start"]["character"].get<int>();
+		int line     = diag["range"]["start"]["line"].get<int>();
+		int col      = diag["range"]["start"]["character"].get<int>();
+		int endLine  = diag["range"]["end"]["line"].get<int>();
+		int endCol   = diag["range"]["end"]["character"].get<int>();
 		int severity = diag.value("severity", 1);
 		std::string message = diag["message"].get<std::string>();
 
-		[results addObject:@{
-			@"line":      @(line),
-			@"character": @(col),
-			@"severity":  @(severity),
-			@"message":   to_ns(message)
+		NSMutableDictionary* entry = [NSMutableDictionary dictionaryWithDictionary:@{
+			@"line":         @(line),
+			@"character":    @(col),
+			@"endLine":      @(endLine),
+			@"endCharacter": @(endCol),
+			@"severity":     @(severity),
+			@"message":      to_ns(message)
 		}];
+
+		// Preserve code, source, data for codeAction context.diagnostics
+		if(diag.contains("code"))
+		{
+			if(diag["code"].is_string())
+				entry[@"code"] = to_ns(diag["code"].get<std::string>());
+			else if(diag["code"].is_number())
+				entry[@"code"] = @(diag["code"].get<int>());
+		}
+
+		if(diag.contains("source"))
+			entry[@"source"] = to_ns(diag["source"].get<std::string>());
+
+		if(diag.contains("data"))
+			entry[@"data"] = [self convertJSON:diag["data"]];
+
+		[results addObject:entry];
 	}
 
 	[_delegate lspClient:self didReceiveDiagnostics:results forDocumentURI:to_ns(uriStr)];
@@ -571,6 +635,19 @@ static NSString* fileFromParams (json const& params)
 				{"rename", {
 					{"dynamicRegistration", false},
 					{"prepareSupport", true}
+				}},
+				{"codeAction", {
+					{"dynamicRegistration", false},
+					{"codeActionLiteralSupport", {
+						{"codeActionKind", {
+							{"valueSet", {"quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports"}}
+						}}
+					}},
+					{"resolveSupport", {
+						{"properties", {"edit", "command"}}
+					}},
+					{"dataSupport", true},
+					{"isPreferredSupport", true}
 				}}
 			}}
 		}}
@@ -715,6 +792,20 @@ static NSString* fileFromParams (json const& params)
 	[self sendNotification:@"$/cancelRequest" params:params];
 }
 
+- (void)respondToApplyEdit:(int)requestId applied:(BOOL)applied failureReason:(NSString*)reason
+{
+	json result = {{"applied", (bool)applied}};
+	if(!applied && reason)
+		result["failureReason"] = reason.UTF8String;
+
+	json response = {
+		{"jsonrpc", "2.0"},
+		{"id",      requestId},
+		{"result",  result}
+	};
+	[self sendMessage:response];
+}
+
 - (id)convertJSON:(json const&)value
 {
 	if(value.is_null())
@@ -742,6 +833,38 @@ static NSString* fileFromParams (json const& params)
 		return dict;
 	}
 	return [NSNull null];
+}
+
+- (json)convertToJSON:(id)obj
+{
+	if([obj isKindOfClass:[NSDictionary class]])
+	{
+		json result = json::object();
+		for(NSString* key in obj)
+			result[key.UTF8String] = [self convertToJSON:obj[key]];
+		return result;
+	}
+	else if([obj isKindOfClass:[NSArray class]])
+	{
+		json result = json::array();
+		for(id item in obj)
+			result.push_back([self convertToJSON:item]);
+		return result;
+	}
+	else if([obj isKindOfClass:[NSString class]])
+		return json([obj UTF8String]);
+	else if([obj isKindOfClass:[NSNumber class]])
+	{
+		if(strcmp([obj objCType], @encode(BOOL)) == 0)
+			return json([obj boolValue]);
+		else if(strcmp([obj objCType], @encode(double)) == 0 || strcmp([obj objCType], @encode(float)) == 0)
+			return json([obj doubleValue]);
+		else
+			return json([obj intValue]);
+	}
+	else if([obj isKindOfClass:[NSNull class]])
+		return json(nullptr);
+	return json(nullptr);
 }
 
 - (void)requestCompletionForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
@@ -1088,6 +1211,97 @@ static NSString* fileFromParams (json const& params)
 
 		if(callback)
 			callback([result isKindOfClass:[NSDictionary class]] ? result : nil);
+	}];
+}
+
+- (void)requestCodeActionsForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter diagnostics:(NSArray<NSDictionary*>*)diagnostics completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json diagsJson = json::array();
+	for(NSDictionary* diag in diagnostics)
+	{
+		json d = {
+			{"range", {
+				{"start", {{"line", [diag[@"line"] intValue]}, {"character", [diag[@"character"] intValue]}}},
+				{"end", {{"line", [diag[@"endLine"] intValue]}, {"character", [diag[@"endCharacter"] intValue]}}}
+			}},
+			{"severity", [diag[@"severity"] intValue]},
+			{"message", [diag[@"message"] UTF8String]}
+		};
+
+		if(diag[@"code"])
+		{
+			if([diag[@"code"] isKindOfClass:[NSString class]])
+				d["code"] = [diag[@"code"] UTF8String];
+			else
+				d["code"] = [diag[@"code"] intValue];
+		}
+		if(diag[@"source"])
+			d["source"] = [diag[@"source"] UTF8String];
+		if(diag[@"data"])
+			d["data"] = [self convertToJSON:diag[@"data"]];
+
+		diagsJson.push_back(d);
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"range", {
+			{"start", {{"line", (int)line}, {"character", (int)character}}},
+			{"end", {{"line", (int)endLine}, {"character", (int)endCharacter}}}
+		}},
+		{"context", {
+			{"diagnostics", diagsJson},
+			{"triggerKind", 1}
+		}}
+	};
+
+	[self sendRequest:@"textDocument/codeAction" params:params callback:^(id result) {
+		if(callback)
+			callback([result isKindOfClass:[NSArray class]] ? result : nil);
+	}];
+}
+
+- (void)resolveCodeAction:(NSDictionary*)codeAction completion:(void(^)(NSDictionary*))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = [self convertToJSON:codeAction];
+	[self sendRequest:@"codeAction/resolve" params:params callback:^(id result) {
+		if(callback)
+			callback([result isKindOfClass:[NSDictionary class]] ? result : nil);
+	}];
+}
+
+- (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments completion:(void(^)(id))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"command", command.UTF8String}
+	};
+	if(arguments)
+		params["arguments"] = [self convertToJSON:arguments];
+
+	[self sendRequest:@"workspace/executeCommand" params:params callback:^(id result) {
+		if(callback)
+			callback(result);
 	}];
 }
 

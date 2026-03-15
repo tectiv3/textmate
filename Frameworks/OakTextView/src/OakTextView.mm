@@ -45,6 +45,7 @@
 #import <editor/editor.h>
 #import <editor/write.h>
 #import <lsp/LSPManager.h>
+#import <lsp/LSPClient.h>
 #import <io/exec.h>
 #import <Find/Find.h>
 
@@ -542,6 +543,10 @@ private:
 	size_t _renameCaret;
 	text::pos_t _renamePos;
 
+	// = LSP Code Actions =
+
+	int _lspCodeActionsRequestId;
+
 	// =================
 	// = Accessibility =
 	// =================
@@ -1001,6 +1006,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentDidSave:) name:OakDocumentDidSaveNotification object:_document];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentWillReload:) name:OakDocumentWillReloadNotification object:_document];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(documentDidReload:) name:OakDocumentDidReloadNotification object:_document];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleApplyEditRequest:) name:@"LSPApplyEditRequest" object:nil];
 
 		[self resetBlinkCaretTimer];
 		[self setNeedsDisplay:YES];
@@ -1539,18 +1545,6 @@ doScroll:
 	return self.window.level;
 }
 
-- (BOOL)respondsToSelector:(SEL)aSelector
-{
-	// Do not handle cancelOperation: (as complete:) when caret is not on a word (instead give next responder a chance)
-	if(aSelector == @selector(cancelOperation:) && ng::word_at(*documentView, documentView->ranges().last()).empty())
-		return NO;
-	return [super respondsToSelector:aSelector];
-}
-
-- (void)cancelOperation:(id)sender
-{
-	[self complete:sender];
-}
 
 // =============================
 // = NSAccessibilityStaticText =
@@ -3323,6 +3317,21 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	{
 		OakDocument* doc = self.document;
 		return doc && [[LSPManager sharedManager] serverSupportsRenameForDocument:doc];
+	}
+	else if([aMenuItem action] == @selector(lspCodeActions:))
+	{
+		OakDocument* doc = self.document;
+		if(!doc)
+			return NO;
+
+		// Don't capture Cmd+. when search bar or other text field is first responder
+		NSResponder* firstResponder = self.window.firstResponder;
+		if(firstResponder != self && [firstResponder isKindOfClass:[NSTextField class]])
+			return NO;
+
+		auto const settings = settings_for_path(doc.virtualPath ? to_s(doc.virtualPath) : to_s(doc.path), to_s(doc.fileType), to_s(doc.directory ?: @""));
+		bool enabled = settings.get("lspCodeActions", true);
+		return enabled && [[LSPManager sharedManager] serverSupportsCodeActionsForDocument:doc];
 	}
 	return YES;
 }
@@ -5414,6 +5423,193 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 			[result writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
 		}
 	}
+}
+
+// = LSP Code Actions =
+// ====================
+
+- (void)handleApplyEditRequest:(NSNotification*)notification
+{
+	NSDictionary* workspaceEdit = notification.userInfo[@"workspaceEdit"];
+	int requestId = [notification.userInfo[@"requestId"] intValue];
+	LSPClient* client = notification.userInfo[@"client"];
+
+	BOOL applied = NO;
+	if(workspaceEdit)
+	{
+		[self applyWorkspaceEdit:workspaceEdit];
+		applied = YES;
+	}
+
+	[client respondToApplyEdit:requestId applied:applied failureReason:applied ? nil : @"No workspace edit provided"];
+}
+
+- (void)lspCodeActions:(id)sender
+{
+	if(!documentView)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	auto const settings = settings_for_path(doc.virtualPath ? to_s(doc.virtualPath) : to_s(doc.path), to_s(doc.fileType), to_s(doc.directory ?: @""));
+	if(!settings.get("lspCodeActions", true))
+		return;
+
+	LSPManager* lsp = [LSPManager sharedManager];
+	if(![lsp serverSupportsCodeActionsForDocument:doc])
+	{
+		NSBeep();
+		return;
+	}
+
+	ng::range_t sel = documentView->ranges().last();
+	text::pos_t startPos = documentView->convert(sel.min().index);
+	text::pos_t endPos   = documentView->convert(sel.max().index);
+
+	[lsp flushPendingChangesForDocument:doc];
+
+	__weak OakTextView* weakSelf = self;
+	[lsp requestCodeActionsForDocument:doc
+		line:startPos.line character:startPos.column
+		endLine:endPos.line endCharacter:endPos.column
+		completion:^(NSArray<NSDictionary*>* actions) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				OakTextView* strongSelf = weakSelf;
+				if(!strongSelf)
+					return;
+				if(!actions || actions.count == 0)
+				{
+					NSBeep();
+					return;
+				}
+				[strongSelf showCodeActionsMenu:actions];
+			});
+		}];
+}
+
+- (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions
+{
+	NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Code Actions"];
+
+	NSMutableArray* quickFixes = [NSMutableArray array];
+	NSMutableArray* refactors  = [NSMutableArray array];
+	NSMutableArray* sources    = [NSMutableArray array];
+	NSMutableArray* other      = [NSMutableArray array];
+
+	for(NSDictionary* action in actions)
+	{
+		// Handle bare Command objects (no kind, title comes from command string)
+		NSMutableDictionary* item = [NSMutableDictionary dictionaryWithDictionary:action];
+		if(!item[@"title"] && item[@"command"] && [item[@"command"] isKindOfClass:[NSString class]])
+		{
+			item[@"title"] = item[@"command"];
+			item[@"_isCommand"] = @YES;
+		}
+
+		NSString* kind = item[@"kind"];
+		if([kind hasPrefix:@"quickfix"])
+			[quickFixes addObject:item];
+		else if([kind hasPrefix:@"refactor"])
+			[refactors addObject:item];
+		else if([kind hasPrefix:@"source"])
+			[sources addObject:item];
+		else
+			[other addObject:item];
+	}
+
+	void (^addSection)(NSMenu*, NSString*, NSArray*) = ^(NSMenu* m, NSString* header, NSArray* items) {
+		if(items.count == 0)
+			return;
+		if(m.numberOfItems > 0)
+			[m addItem:[NSMenuItem separatorItem]];
+		if(header)
+		{
+			NSMenuItem* headerItem = [[NSMenuItem alloc] initWithTitle:header action:nil keyEquivalent:@""];
+			headerItem.enabled = NO;
+			NSDictionary* attrs = @{
+				NSFontAttributeName: [NSFont systemFontOfSize:11 weight:NSFontWeightMedium],
+				NSForegroundColorAttributeName: [NSColor secondaryLabelColor]
+			};
+			headerItem.attributedTitle = [[NSAttributedString alloc] initWithString:header attributes:attrs];
+			[m addItem:headerItem];
+		}
+		for(NSDictionary* codeAction in items)
+		{
+			NSString* title = codeAction[@"title"] ?: @"Untitled";
+			NSMenuItem* menuItem = [[NSMenuItem alloc] initWithTitle:title action:@selector(performCodeAction:) keyEquivalent:@""];
+			menuItem.target = self;
+			menuItem.representedObject = codeAction;
+
+			if([codeAction[@"isPreferred"] boolValue])
+			{
+				NSDictionary* boldAttrs = @{NSFontAttributeName: [NSFont boldSystemFontOfSize:0]};
+				menuItem.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:boldAttrs];
+			}
+
+			if(codeAction[@"disabled"])
+			{
+				menuItem.enabled = NO;
+				menuItem.toolTip = codeAction[@"disabled"][@"reason"];
+			}
+
+			[m addItem:menuItem];
+		}
+	};
+
+	addSection(menu, @"Quick Fix", quickFixes);
+	addSection(menu, @"Refactor", refactors);
+	addSection(menu, @"Source", sources);
+	addSection(menu, nil, other);
+
+	[menu popUpMenuPositioningItem:nil atLocation:[self positionForWindowUnderCaret] inView:self];
+}
+
+- (void)performCodeAction:(NSMenuItem*)sender
+{
+	NSDictionary* action = sender.representedObject;
+	if(!action)
+		return;
+
+	OakDocument* doc = self.document;
+	LSPManager* lsp = [LSPManager sharedManager];
+
+	// Bare Command object (no edit, command is a plain string)
+	if([action[@"_isCommand"] boolValue])
+	{
+		[lsp executeCommand:action[@"command"] arguments:action[@"arguments"] forDocument:doc completion:nil];
+		return;
+	}
+
+	// Apply edit immediately if present, then execute optional command
+	if(action[@"edit"])
+	{
+		[self applyWorkspaceEdit:action[@"edit"]];
+		if(action[@"command"] && [action[@"command"] isKindOfClass:[NSDictionary class]])
+		{
+			NSDictionary* cmd = action[@"command"];
+			[lsp executeCommand:cmd[@"command"] arguments:cmd[@"arguments"] forDocument:doc completion:nil];
+		}
+		return;
+	}
+
+	// No edit present — resolve the action first (server may fill in edit/command)
+	__weak OakTextView* weakSelf = self;
+	[lsp resolveCodeAction:action forDocument:doc completion:^(NSDictionary* resolved) {
+		dispatch_async(dispatch_get_main_queue(), ^{
+			OakTextView* strongSelf = weakSelf;
+			if(!strongSelf)
+				return;
+			if(resolved[@"edit"])
+				[strongSelf applyWorkspaceEdit:resolved[@"edit"]];
+			if(resolved[@"command"] && [resolved[@"command"] isKindOfClass:[NSDictionary class]])
+			{
+				NSDictionary* cmd = resolved[@"command"];
+				[lsp executeCommand:cmd[@"command"] arguments:cmd[@"arguments"] forDocument:doc completion:nil];
+			}
+		});
+	}];
 }
 
 // = LSP Formatting =

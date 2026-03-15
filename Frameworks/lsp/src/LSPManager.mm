@@ -136,11 +136,12 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 
 @interface LSPManager () <LSPClientDelegate>
 {
-	NSMutableDictionary<NSString*, LSPClient*>*  _clients;
-	NSMutableDictionary<NSUUID*, LSPClient*>*    _documentClients;
-	NSMutableDictionary<NSUUID*, NSNumber*>*     _documentVersions;
-	NSMutableSet<NSUUID*>*                       _openDocuments;
-	NSMutableDictionary<NSUUID*, NSTimer*>*      _changeTimers;
+	NSMutableDictionary<NSString*, LSPClient*>*              _clients;
+	NSMutableDictionary<NSUUID*, LSPClient*>*                _documentClients;
+	NSMutableDictionary<NSUUID*, NSNumber*>*                 _documentVersions;
+	NSMutableSet<NSUUID*>*                                   _openDocuments;
+	NSMutableDictionary<NSUUID*, NSTimer*>*                  _changeTimers;
+	NSMutableDictionary<NSString*, NSArray<NSDictionary*>*>* _diagnosticsByURI;
 }
 @end
 
@@ -159,11 +160,12 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 {
 	if(self = [super init])
 	{
-		_clients          = [NSMutableDictionary new];
-		_documentClients  = [NSMutableDictionary new];
-		_documentVersions = [NSMutableDictionary new];
-		_openDocuments    = [NSMutableSet new];
-		_changeTimers     = [NSMutableDictionary new];
+		_clients            = [NSMutableDictionary new];
+		_documentClients    = [NSMutableDictionary new];
+		_documentVersions   = [NSMutableDictionary new];
+		_openDocuments      = [NSMutableSet new];
+		_changeTimers       = [NSMutableDictionary new];
+		_diagnosticsByURI   = [NSMutableDictionary new];
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationWillTerminate:) name:NSApplicationWillTerminateNotification object:nil];
 	}
@@ -305,6 +307,13 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[_openDocuments removeObject:docId];
 	[_documentClients removeObjectForKey:docId];
 	[_documentVersions removeObjectForKey:docId];
+
+	NSString* path = document.path;
+	if(path)
+	{
+		NSURL* fileURL = [NSURL fileURLWithPath:path];
+		[_diagnosticsByURI removeObjectForKey:fileURL.absoluteString];
+	}
 }
 
 - (void)shutdownAll
@@ -600,12 +609,106 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestRenameForURI:uri line:line character:character newName:newName completion:callback];
 }
 
+- (BOOL)serverSupportsCodeActionsForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.codeActionProvider;
+}
+
+- (void)requestCodeActionsForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter completion:(void(^)(NSArray<NSDictionary*>*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback) callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback) callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	NSArray<NSDictionary*>* diagnostics = [self diagnosticsForDocument:document atLine:line character:character endLine:endLine endCharacter:endCharacter];
+
+	[self flushPendingChangesForDocument:document];
+	[client requestCodeActionsForURI:uri line:line character:character endLine:endLine endCharacter:endCharacter diagnostics:diagnostics completion:callback];
+}
+
+- (void)resolveCodeAction:(NSDictionary*)codeAction forDocument:(OakDocument*)document completion:(void(^)(NSDictionary*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback) callback(nil);
+		return;
+	}
+	[client resolveCodeAction:codeAction completion:callback];
+}
+
+- (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments forDocument:(OakDocument*)document completion:(void(^)(id))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback) callback(nil);
+		return;
+	}
+	[client executeCommand:command arguments:arguments completion:callback];
+}
+
 - (BOOL)hasClientForDocument:(OakDocument*)document
 {
 	return document && _documentClients[document.identifier] != nil;
 }
 
+- (NSArray<NSDictionary*>*)diagnosticsForDocument:(OakDocument*)document atLine:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter
+{
+	NSString* path = document.path;
+	if(!path)
+		return @[];
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+	NSArray<NSDictionary*>* allDiags = _diagnosticsByURI[uri];
+	if(!allDiags)
+		return @[];
+
+	NSMutableArray<NSDictionary*>* result = [NSMutableArray array];
+	for(NSDictionary* diag in allDiags)
+	{
+		NSUInteger dLine    = [diag[@"line"] unsignedIntegerValue];
+		NSUInteger dEndLine = [diag[@"endLine"] unsignedIntegerValue];
+
+		// Simple line-range overlap check
+		if(dEndLine >= line && dLine <= endLine)
+			[result addObject:diag];
+	}
+	return result;
+}
+
 #pragma mark - LSPClientDelegate
+
+- (void)lspClient:(LSPClient*)client didReceiveApplyEditRequest:(NSDictionary*)workspaceEdit requestId:(int)requestId
+{
+	dispatch_async(dispatch_get_main_queue(), ^{
+		NSDictionary* userInfo = @{
+			@"workspaceEdit": workspaceEdit,
+			@"requestId": @(requestId),
+			@"client": client
+		};
+		[NSNotificationCenter.defaultCenter postNotificationName:@"LSPApplyEditRequest" object:self userInfo:userInfo];
+	});
+}
 
 - (void)lspClientDidTerminate:(LSPClient*)client
 {
@@ -644,6 +747,9 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri
 {
+	// Cache full diagnostics for codeAction requests
+	_diagnosticsByURI[uri] = diagnostics;
+
 	NSURL* url = [NSURL URLWithString:uri];
 	NSString* filePath = url.path;
 	if(!filePath)

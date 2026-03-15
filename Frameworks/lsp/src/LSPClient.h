@@ -9,6 +9,7 @@
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri;
 @optional
 - (void)lspClientDidTerminate:(LSPClient*)client;
+- (void)lspClient:(LSPClient*)client didReceiveApplyEditRequest:(NSDictionary*)workspaceEdit requestId:(int)requestId;
 @end
 
 extern NSString* const LSPLogNotification;
@@ -23,6 +24,8 @@ extern NSString* const LSPProgressNotification;
 @property (nonatomic, readonly) BOOL documentRangeFormattingProvider;
 @property (nonatomic, readonly) BOOL completionResolveProvider;
 @property (nonatomic, readonly) BOOL renameProvider;
+@property (nonatomic, readonly) BOOL codeActionProvider;
+@property (nonatomic, readonly) BOOL codeActionResolveProvider;
 - (instancetype)initWithCommand:(NSString*)command arguments:(NSArray<NSString*>*)arguments workingDirectory:(NSString*)workingDirectory initOptions:(NSString*)initOptionsJSON;
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId;
 - (void)documentDidChange:(OakDocument*)document version:(int)version;
@@ -38,7 +41,11 @@ extern NSString* const LSPProgressNotification;
 - (void)resolveCompletionItem:(NSDictionary*)item completion:(void(^)(NSDictionary*))callback;
 - (void)prepareRenameForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback;
 - (void)requestRenameForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character newName:(NSString*)newName completion:(void(^)(NSDictionary*))callback;
+- (void)requestCodeActionsForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter diagnostics:(NSArray<NSDictionary*>*)diagnostics completion:(void(^)(NSArray<NSDictionary*>*))callback;
+- (void)resolveCodeAction:(NSDictionary*)codeAction completion:(void(^)(NSDictionary*))callback;
+- (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments completion:(void(^)(id))callback;
 - (void)cancelRequest:(int)requestId;
+- (void)respondToApplyEdit:(int)requestId applied:(BOOL)applied failureReason:(NSString*)reason;
 @end
 
 #endif /* LSP_CLIENT_H_POC */
