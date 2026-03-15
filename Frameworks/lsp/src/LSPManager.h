@@ -23,8 +23,8 @@
 - (BOOL)serverSupportsFormattingForDocument:(OakDocument*)document;
 - (BOOL)serverSupportsRangeFormattingForDocument:(OakDocument*)document;
 - (BOOL)serverSupportsRenameForDocument:(OakDocument*)document;
-- (void)requestPrepareRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary* _Nullable))callback;
-- (void)requestRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character newName:(NSString*)newName completion:(void(^)(NSDictionary* _Nullable))callback;
+- (void)requestPrepareRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary*))callback;
+- (void)requestRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character newName:(NSString*)newName completion:(void(^)(NSDictionary*))callback;
 - (BOOL)hasClientForDocument:(OakDocument*)document;
 @end
 

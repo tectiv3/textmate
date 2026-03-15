@@ -531,6 +531,17 @@ private:
 	NSTimer* _lspHoverTimer;
 	ng::index_t _lspHoverIndex;
 
+	// = LSP Rename =
+
+	OakRenameField* _lspRenameField;
+	OakRenamePreviewPanel* _lspRenamePreviewPanel;
+	NSDictionary* _pendingRenameEdits;
+	NSString* _pendingRenameOldName;
+	NSString* _pendingRenameNewName;
+	size_t _renameRevision;
+	size_t _renameCaret;
+	text::pos_t _renamePos;
+
 	// =================
 	// = Accessibility =
 	// =================
@@ -3308,6 +3319,11 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		[aMenuItem updateTitle:[NSString stringWithCxxString:format_string::replace(to_s(aMenuItem.title), "\\b(\\w+) / (Selection)\\b", showSelection ? "$2" : "$1")]];
 		return showSelection ? YES : hasDoc;
 	}
+	else if([aMenuItem action] == @selector(lspRename:))
+	{
+		OakDocument* doc = self.document;
+		return doc && [[LSPManager sharedManager] serverSupportsRenameForDocument:doc];
+	}
 	return YES;
 }
 
@@ -5004,6 +5020,400 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 - (void)referencesPanelDidClose:(OakReferencesPanel*)panel
 {
 	// No cleanup needed — panel can be reused
+}
+
+// ==============
+// = LSP Rename =
+// ==============
+
+static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit (NSDictionary* workspaceEdit)
+{
+	NSMutableDictionary<NSString*, NSMutableArray<NSDictionary*>*>* editsByUri = [NSMutableDictionary new];
+
+	// Prefer documentChanges (richer format, per LSP spec)
+	NSArray* documentChanges = workspaceEdit[@"documentChanges"];
+	if(documentChanges)
+	{
+		for(NSDictionary* docChange in documentChanges)
+		{
+			NSString* uri = docChange[@"textDocument"][@"uri"];
+			NSArray* edits = docChange[@"edits"];
+			if(uri && edits)
+				editsByUri[uri] = [edits mutableCopy];
+		}
+		return editsByUri;
+	}
+
+	// Fall back to changes
+	NSDictionary* changes = workspaceEdit[@"changes"];
+	if(changes)
+	{
+		for(NSString* uri in changes)
+			editsByUri[uri] = [changes[uri] mutableCopy];
+	}
+
+	return editsByUri;
+}
+
+- (void)lspRename:(id)sender
+{
+	if(!documentView)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	LSPManager* lsp = [LSPManager sharedManager];
+	if(![lsp serverSupportsRenameForDocument:doc])
+	{
+		NSBeep();
+		return;
+	}
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	// Extract word under cursor as fallback placeholder
+	std::string const buf = documentView->substr();
+	size_t wordStart = caret, wordEnd = caret;
+	while(wordStart > 0 && (isalnum(buf[wordStart - 1]) || buf[wordStart - 1] == '_'))
+		--wordStart;
+	while(wordEnd < buf.size() && (isalnum(buf[wordEnd]) || buf[wordEnd] == '_'))
+		++wordEnd;
+	NSString* fallbackName = to_ns(buf.substr(wordStart, wordEnd - wordStart));
+
+	if(fallbackName.length == 0)
+	{
+		NSBeep();
+		return;
+	}
+
+	// Save position for later rename request
+	_renameCaret = caret;
+	_renamePos = pos;
+
+	[lsp flushPendingChangesForDocument:doc];
+
+	__weak OakTextView* weakSelf = self;
+
+	[lsp requestPrepareRenameForDocument:doc line:pos.line character:pos.column completion:^(NSDictionary* result) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !strongSelf->documentView)
+			return;
+
+		NSString* placeholder = fallbackName;
+
+		if(result)
+		{
+			// Shape 2: {range, placeholder}
+			if(result[@"placeholder"])
+				placeholder = result[@"placeholder"];
+			// Shape 3: {defaultBehavior: true} — use fallback
+			// Shape 1: bare range — extract from current buffer state
+			else if(result[@"start"] && result[@"end"])
+			{
+				NSDictionary* start = result[@"start"];
+				NSDictionary* end = result[@"end"];
+				std::string const freshBuf = strongSelf->documentView->substr();
+				size_t startIdx = strongSelf->documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+				size_t endIdx = strongSelf->documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+				if(startIdx < endIdx && endIdx <= freshBuf.size())
+					placeholder = to_ns(freshBuf.substr(startIdx, endIdx - startIdx));
+			}
+			else if(result[@"range"] && !result[@"placeholder"])
+			{
+				NSDictionary* range = result[@"range"];
+				NSDictionary* start = range[@"start"];
+				NSDictionary* end = range[@"end"];
+				if(start && end)
+				{
+					std::string const freshBuf = strongSelf->documentView->substr();
+					size_t startIdx = strongSelf->documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+					size_t endIdx = strongSelf->documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+					if(startIdx < endIdx && endIdx <= freshBuf.size())
+						placeholder = to_ns(freshBuf.substr(startIdx, endIdx - startIdx));
+				}
+			}
+		}
+		else
+		{
+			// prepareRename returned null — symbol not renameable
+			NSBeep();
+			return;
+		}
+
+		strongSelf->_pendingRenameOldName = placeholder;
+		[strongSelf showRenameFieldWithPlaceholder:placeholder];
+	}];
+}
+
+- (void)showRenameFieldWithPlaceholder:(NSString*)placeholder
+{
+	if(!_lspTheme)
+	{
+		_lspTheme = [[OakThemeEnvironment alloc] init];
+		NSFont* f = self.font ?: [NSFont userFixedPitchFontOfSize:12];
+		[_lspTheme applyTheme:@{
+			@"fontName": f.fontName,
+			@"fontSize": @(f.pointSize),
+			@"backgroundColor": [NSColor textBackgroundColor],
+			@"foregroundColor": [NSColor textColor],
+		}];
+	}
+
+	if(!_lspRenameField)
+	{
+		_lspRenameField = [[OakRenameField alloc] initWithTheme:_lspTheme];
+		_lspRenameField.delegate = (id<OakRenameFieldDelegate>)self;
+	}
+
+	NSPoint caretPoint = [self positionForWindowUnderCaret];
+	[_lspRenameField showIn:self at:caretPoint placeholder:placeholder];
+}
+
+- (void)renameField:(OakRenameField*)field didConfirmWithName:(NSString*)newName
+{
+	if(!documentView)
+		return;
+
+	// Same name — no-op
+	if([newName isEqualToString:_pendingRenameOldName])
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	_pendingRenameNewName = newName;
+	// Capture revision NOW — this is the state the rename edits must match
+	_renameRevision = documentView->revision();
+
+	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
+
+	__weak OakTextView* weakSelf = self;
+
+	[[LSPManager sharedManager] requestRenameForDocument:doc line:_renamePos.line character:_renamePos.column newName:newName completion:^(NSDictionary* workspaceEdit) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !strongSelf->documentView)
+			return;
+
+		// Staleness guard — buffer must not have changed since we sent the request
+		if(strongSelf->documentView->revision() != strongSelf->_renameRevision)
+			return;
+
+		if(!workspaceEdit)
+		{
+			NSBeep();
+			return;
+		}
+
+		strongSelf->_pendingRenameEdits = workspaceEdit;
+		[strongSelf showRenamePreviewWithEdit:workspaceEdit];
+	}];
+}
+
+- (void)renameFieldDidDismiss:(OakRenameField*)field
+{
+	_pendingRenameOldName = nil;
+}
+
+- (void)showRenamePreviewWithEdit:(NSDictionary*)workspaceEdit
+{
+	NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsByUri = editsFromWorkspaceEdit(workspaceEdit);
+	if(editsByUri.count == 0)
+	{
+		NSBeep();
+		return;
+	}
+
+	NSMutableArray<OakRenameItem*>* items = [NSMutableArray new];
+	NSMutableDictionary<NSString*, NSArray<NSString*>*>* fileLines = [NSMutableDictionary new];
+
+	OakDocument* doc = self.document;
+	NSString* docPath = doc.path;
+	NSString* baseDir = docPath ? [docPath stringByDeletingLastPathComponent] : nil;
+
+	for(NSString* uri in editsByUri)
+	{
+		NSURL* url = [NSURL URLWithString:uri];
+		NSString* filePath = url.path;
+		if(!filePath)
+			continue;
+
+		NSString* displayPath = filePath;
+		if(baseDir && [filePath hasPrefix:baseDir])
+			displayPath = [filePath substringFromIndex:baseDir.length + 1];
+
+		// Load file lines (cached per file)
+		NSArray<NSString*>* lines = fileLines[filePath];
+		if(!lines)
+		{
+			NSString* fileContent = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+			lines = fileContent ? [fileContent componentsSeparatedByString:@"\n"] : @[];
+			fileLines[filePath] = lines;
+		}
+
+		for(NSDictionary* edit in editsByUri[uri])
+		{
+			NSDictionary* range = edit[@"range"];
+			NSDictionary* start = range[@"start"];
+			NSString* newText = edit[@"newText"];
+			if(!start || !newText)
+				continue;
+
+			NSUInteger line = [start[@"line"] unsignedIntegerValue];
+			NSString* fullOldLine = (line < lines.count) ? lines[line] : @"";
+			NSString* oldLineText = [fullOldLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+
+			// Build new line text by applying the edit
+			NSDictionary* end = range[@"end"];
+			NSUInteger startChar = [start[@"character"] unsignedIntegerValue];
+			NSUInteger endChar = end ? [end[@"character"] unsignedIntegerValue] : startChar;
+			NSString* newLineText = fullOldLine;
+			if(startChar <= fullOldLine.length && endChar <= fullOldLine.length)
+			{
+				NSRange replaceRange = NSMakeRange(startChar, endChar - startChar);
+				newLineText = [fullOldLine stringByReplacingCharactersInRange:replaceRange withString:newText];
+			}
+			newLineText = [newLineText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+
+			OakRenameItem* item = [[OakRenameItem alloc]
+				initWithFilePath:filePath
+				     displayPath:displayPath
+				            line:(int)line
+				         oldText:oldLineText
+				         newText:newLineText];
+			[items addObject:item];
+		}
+	}
+
+	if(items.count == 0)
+	{
+		NSBeep();
+		return;
+	}
+
+	if(!_lspRenamePreviewPanel)
+	{
+		_lspRenamePreviewPanel = [[OakRenamePreviewPanel alloc] initWithTheme:_lspTheme];
+		_lspRenamePreviewPanel.delegate = (id<OakRenamePreviewPanelDelegate>)self;
+	}
+
+	[_lspRenamePreviewPanel showWithItems:items
+		oldName:_pendingRenameOldName ?: @""
+		newName:_pendingRenameNewName ?: @""
+		parentWindow:self.window];
+}
+
+- (void)renamePreviewPanelDidConfirm:(OakRenamePreviewPanel*)panel
+{
+	NSDictionary* workspaceEdit = _pendingRenameEdits;
+	_pendingRenameEdits = nil;
+	_pendingRenameOldName = nil;
+	_pendingRenameNewName = nil;
+
+	if(!workspaceEdit || !documentView)
+		return;
+
+	// Final staleness check
+	if(documentView->revision() != _renameRevision)
+		return;
+
+	[self applyWorkspaceEdit:workspaceEdit];
+}
+
+- (void)renamePreviewPanelDidCancel:(OakRenamePreviewPanel*)panel
+{
+	_pendingRenameEdits = nil;
+	_pendingRenameOldName = nil;
+	_pendingRenameNewName = nil;
+}
+
+- (void)applyWorkspaceEdit:(NSDictionary*)workspaceEdit
+{
+	NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsByUri = editsFromWorkspaceEdit(workspaceEdit);
+
+	for(NSString* uri in editsByUri)
+	{
+		NSURL* url = [NSURL URLWithString:uri];
+		NSString* filePath = url.path;
+		if(!filePath)
+			continue;
+
+		NSArray<NSDictionary*>* edits = editsByUri[uri];
+		if(edits.count == 0)
+			continue;
+
+		// Skip read-only files
+		if(![[NSFileManager defaultManager] isWritableFileAtPath:filePath])
+			continue;
+
+		// Check if this is the current document (has a live buffer)
+		OakDocument* currentDoc = self.document;
+		BOOL isCurrentDocument = currentDoc.path && [currentDoc.path isEqualToString:filePath];
+
+		if(isCurrentDocument && documentView)
+		{
+			// Apply to current buffer — handle_result creates a single undo group
+			ng::ranges_t capturedRanges = documentView->ranges();
+			std::string result = applyTextEdits(*documentView, edits);
+			AUTO_REFRESH;
+			documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+		}
+		else
+		{
+			// Apply edits to file on disk (whether open in another tab or not)
+			NSString* content = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+			if(!content)
+				continue;
+
+			// Sort edits in reverse order (bottom-to-top) to preserve offsets
+			NSArray* sorted = [edits sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* a, NSDictionary* b) {
+				NSDictionary* aStart = a[@"range"][@"start"];
+				NSDictionary* bStart = b[@"range"][@"start"];
+				NSInteger aLine = [aStart[@"line"] integerValue];
+				NSInteger bLine = [bStart[@"line"] integerValue];
+				if(aLine != bLine)
+					return bLine < aLine ? NSOrderedAscending : NSOrderedDescending;
+				NSInteger aChar = [aStart[@"character"] integerValue];
+				NSInteger bChar = [bStart[@"character"] integerValue];
+				return bChar < aChar ? NSOrderedAscending : NSOrderedDescending;
+			}];
+
+			NSArray<NSString*>* lines = [content componentsSeparatedByString:@"\n"];
+			NSMutableArray<NSString*>* mutableLines = [lines mutableCopy];
+
+			for(NSDictionary* edit in sorted)
+			{
+				NSDictionary* range = edit[@"range"];
+				NSDictionary* start = range[@"start"];
+				NSDictionary* end = range[@"end"];
+				NSString* newText = edit[@"newText"];
+				if(!start || !end || !newText)
+					continue;
+
+				NSUInteger startLine = [start[@"line"] unsignedIntegerValue];
+				NSUInteger startChar = [start[@"character"] unsignedIntegerValue];
+				NSUInteger endLine = [end[@"line"] unsignedIntegerValue];
+				NSUInteger endChar = [end[@"character"] unsignedIntegerValue];
+
+				if(startLine >= mutableLines.count || endLine >= mutableLines.count)
+					continue;
+
+				NSString* prefix = [mutableLines[startLine] substringToIndex:MIN(startChar, mutableLines[startLine].length)];
+				NSString* suffix = [mutableLines[endLine] substringFromIndex:MIN(endChar, mutableLines[endLine].length)];
+				NSString* replacement = [NSString stringWithFormat:@"%@%@%@", prefix, newText, suffix];
+
+				NSRange lineRange = NSMakeRange(startLine, endLine - startLine + 1);
+				NSArray* replacementLines = [replacement componentsSeparatedByString:@"\n"];
+				[mutableLines replaceObjectsInRange:lineRange withObjectsFromArray:replacementLines];
+			}
+
+			NSString* result = [mutableLines componentsJoinedByString:@"\n"];
+			[result writeToFile:filePath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+		}
+	}
 }
 
 // = LSP Formatting =
