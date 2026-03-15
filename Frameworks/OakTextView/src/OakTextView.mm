@@ -401,6 +401,7 @@ struct document_view_t : ng::buffer_api_t
 	void insert_with_pairing (std::string const& str, ng::indent_correction_t indentCorrections, bool autoPairing, std::string const& scopeAttributes = NULL_STR) { _editor->insert_with_pairing(str, indentCorrections, autoPairing, scopeAttributes); }
 	void move_selection_to (ng::index_t const& index, bool selectInsertion = true) { _editor->move_selection_to(index, selectInsertion); }
 	ng::ranges_t replace_all (std::string const& searchFor, std::string const& replaceWith, find::options_t options = find::none, bool searchOnlySelection = false) { return _editor->replace_all(searchFor, replaceWith, options, searchOnlySelection); }
+	void perform_replacements (std::multimap<std::pair<size_t, size_t>, std::string> const& replacements) { _editor->perform_replacements(replacements); }
 	void delete_tab_trigger (std::string const& str) { _editor->delete_tab_trigger(str); }
 	void macro_dispatch (plist::dictionary_t const& args, std::map<std::string, std::string> const& variables) { _editor->macro_dispatch(args, variables, _command_runner); }
 	void snippet_dispatch (plist::dictionary_t const& args, std::map<std::string, std::string> const& variables) { _editor->snippet_dispatch(args, variables); }
@@ -1095,7 +1096,6 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 				__block BOOL done = NO;
 				__block NSArray<NSDictionary*>* receivedEdits = nil;
-				ng::ranges_t capturedRanges = documentView->ranges();
 
 				[[LSPManager sharedManager] requestFormattingForDocument:doc
 					tabSize:doc.tabSize insertSpaces:doc.softTabs
@@ -1113,9 +1113,8 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 				if(receivedEdits.count > 0)
 				{
-					std::string result = applyTextEdits(*documentView, receivedEdits);
 					AUTO_REFRESH;
-					documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+					documentView->perform_replacements(replacementsFromTextEdits(*documentView, receivedEdits));
 				}
 			}
 		}
@@ -5372,56 +5371,8 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 
 		if(isCurrentDocument && documentView)
 		{
-			// Sort edits in reverse order (bottom-to-top) for offset-safe application
-			NSArray* sorted = [edits sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* a, NSDictionary* b) {
-				NSInteger aLine = [a[@"range"][@"start"][@"line"] integerValue];
-				NSInteger bLine = [b[@"range"][@"start"][@"line"] integerValue];
-				if(aLine != bLine)
-					return bLine < aLine ? NSOrderedAscending : NSOrderedDescending;
-				NSInteger aChar = [a[@"range"][@"start"][@"character"] integerValue];
-				NSInteger bChar = [b[@"range"][@"start"][@"character"] integerValue];
-				return bChar < aChar ? NSOrderedAscending : NSOrderedDescending;
-			}];
-
-			// Compute bounding range of all edits
-			size_t minOffset = documentView->size(), maxOffset = 0;
-			for(NSDictionary* edit in sorted)
-			{
-				NSDictionary* start = edit[@"range"][@"start"];
-				NSDictionary* end   = edit[@"range"][@"end"];
-				size_t from = documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
-				size_t to   = documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
-				minOffset = std::min(minOffset, std::min(from, to));
-				maxOffset = std::max(maxOffset, std::max(from, to));
-			}
-			minOffset = std::min(minOffset, documentView->size());
-			maxOffset = std::min(maxOffset, documentView->size());
-
-			// Extract the bounding region and apply edits within it
-			std::string content = documentView->substr(minOffset, maxOffset);
-			for(NSDictionary* edit in sorted)
-			{
-				NSDictionary* start = edit[@"range"][@"start"];
-				NSDictionary* end   = edit[@"range"][@"end"];
-				NSString* newText   = edit[@"newText"];
-				if(!start || !end || !newText)
-					continue;
-
-				size_t from = documentView->convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
-				size_t to   = documentView->convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
-				from = std::min(from, documentView->size());
-				to   = std::min(to, documentView->size());
-				if(from > to) std::swap(from, to);
-
-				// Adjust to be relative to bounding range
-				content.replace(from - minOffset, to - from, to_s(newText));
-			}
-
-			// Use replace_input so cursor outside edit range shifts naturally
-			ng::ranges_t capturedRanges = documentView->ranges();
-			ng::ranges_t inputRange(ng::range_t(minOffset, maxOffset));
 			AUTO_REFRESH;
-			documentView->handle_result(content, output::replace_input, output_format::text, output_caret::interpolate_by_line, inputRange, {});
+			documentView->perform_replacements(replacementsFromTextEdits(*documentView, edits));
 
 			// Clear lightbulb — diagnostics are stale until server re-publishes
 			OakDocumentView* docView = (OakDocumentView*)[self enclosingScrollView].superview;
@@ -5495,18 +5446,46 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	static int lastHandledRequestId = -1;
 	if(requestId == lastHandledRequestId)
 		return;
-	lastHandledRequestId = requestId;
 
 	// Guard against double-apply: if performCodeAction already applied an edit
 	// directly, the server may also send workspace/applyEdit with the same content
 	if(_didApplyCodeActionEdit)
 	{
 		_didApplyCodeActionEdit = NO;
+		lastHandledRequestId = requestId;
 		[client respondToApplyEdit:requestId applied:YES failureReason:nil];
 		return;
 	}
 
+	// Prefer the view that owns one of the edited documents so that
+	// live-buffer edits go through perform_replacements with correct cursor.
+	// Fall back to key window's first responder for cross-file-only edits.
 	NSDictionary* workspaceEdit = notification.userInfo[@"workspaceEdit"];
+	if(workspaceEdit && documentView)
+	{
+		NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsByUri = editsFromWorkspaceEdit(workspaceEdit);
+		OakDocument* currentDoc = self.document;
+		BOOL ownsEditedDocument = NO;
+		for(NSString* uri in editsByUri)
+		{
+			NSString* filePath = [NSURL URLWithString:uri].path;
+			if(currentDoc.path && [currentDoc.path isEqualToString:filePath])
+			{
+				ownsEditedDocument = YES;
+				break;
+			}
+		}
+
+		if(!ownsEditedDocument)
+		{
+			// No view owns the file — let key window's text view handle as fallback
+			if(self.window != [NSApp keyWindow] || self != [self.window firstResponder])
+				return;
+		}
+	}
+
+	lastHandledRequestId = requestId;
+
 	BOOL applied = NO;
 	if(workspaceEdit)
 	{
@@ -5701,23 +5680,10 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 // = LSP Formatting =
 // ==================
 
-static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDictionary*>* edits)
+static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDictionary*>* edits)
 {
-	NSArray* sorted = [edits sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* a, NSDictionary* b) {
-		NSDictionary* aStart = a[@"range"][@"start"];
-		NSDictionary* bStart = b[@"range"][@"start"];
-		NSInteger aLine = [aStart[@"line"] integerValue];
-		NSInteger bLine = [bStart[@"line"] integerValue];
-		if(aLine != bLine)
-			return bLine < aLine ? NSOrderedAscending : NSOrderedDescending;
-		NSInteger aChar = [aStart[@"character"] integerValue];
-		NSInteger bChar = [bStart[@"character"] integerValue];
-		return bChar < aChar ? NSOrderedAscending : NSOrderedDescending;
-	}];
-
-	std::string content = buffer.substr(0, buffer.size());
-
-	for(NSDictionary* edit in sorted)
+	std::multimap<std::pair<size_t, size_t>, std::string> replacements;
+	for(NSDictionary* edit in edits)
 	{
 		NSDictionary* range = edit[@"range"];
 		NSDictionary* start = range[@"start"];
@@ -5726,18 +5692,15 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		if(!start || !end || !newText)
 			continue;
 
-		size_t startOffset = buffer.convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
-		size_t endOffset   = buffer.convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+		size_t from = buffer.convert(text::pos_t([start[@"line"] integerValue], [start[@"character"] integerValue]));
+		size_t to   = buffer.convert(text::pos_t([end[@"line"] integerValue], [end[@"character"] integerValue]));
+		from = std::min(from, buffer.size());
+		to   = std::min(to, buffer.size());
+		if(from > to) std::swap(from, to);
 
-		startOffset = std::min(startOffset, buffer.size());
-		endOffset   = std::min(endOffset, buffer.size());
-		if(startOffset > endOffset)
-			std::swap(startOffset, endOffset);
-
-		content.replace(startOffset, endOffset - startOffset, to_s(newText));
+		replacements.emplace(std::make_pair(from, to), to_s(newText));
 	}
-
-	return content;
+	return replacements;
 }
 
 - (void)lspFormatDocument:(id)sender
@@ -5780,9 +5743,8 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 				if(strongSelf->documentView->revision() != revision)
 					return;
 
-				std::string result = applyTextEdits(*strongSelf->documentView, edits);
 				AUTO_REFRESH;
-				strongSelf->documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+				strongSelf->documentView->perform_replacements(replacementsFromTextEdits(*strongSelf->documentView, edits));
 			}];
 	}
 	else if([lsp serverSupportsFormattingForDocument:doc])
@@ -5798,9 +5760,8 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 				if(strongSelf->documentView->revision() != revision)
 					return;
 
-				std::string result = applyTextEdits(*strongSelf->documentView, edits);
 				AUTO_REFRESH;
-				strongSelf->documentView->handle_result(result, output::replace_document, output_format::text, output_caret::interpolate_by_line, capturedRanges, {});
+				strongSelf->documentView->perform_replacements(replacementsFromTextEdits(*strongSelf->documentView, edits));
 			}];
 	}
 	else
