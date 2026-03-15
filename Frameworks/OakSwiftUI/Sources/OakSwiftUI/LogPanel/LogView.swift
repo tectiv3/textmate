@@ -4,6 +4,7 @@ struct LogView: View {
 	@ObservedObject var model: LogViewModel
 	@State private var searchText = ""
 	@State private var autoScroll = true
+	@State private var selection = Set<UUID>()
 
 	var filteredEntries: [LogEntry] {
 		if searchText.isEmpty {
@@ -16,31 +17,26 @@ struct LogView: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			ScrollViewReader { proxy in
-				List {
-					ForEach(filteredEntries) { entry in
-						LogRow(entry: entry)
-							.id(entry.id)
-							.listRowSeparator(.hidden)
-					}
-					Color.clear
-						.frame(height: 1)
-						.id("bottom-anchor")
+				List(filteredEntries, selection: $selection) { entry in
+					LogRow(entry: entry)
+						.id(entry.id)
+						.listRowSeparator(.hidden)
 				}
-				.textSelection(.enabled)
 				.listStyle(PlainListStyle())
 				.onChange(of: model.entries.count) { _, _ in
 					if autoScroll {
 						withAnimation {
-							proxy.scrollTo("bottom-anchor", anchor: .bottom)
+							proxy.scrollTo(filteredEntries.last?.id, anchor: .bottom)
 						}
 					}
 				}
 				.onChange(of: searchText) { _, _ in
-					if autoScroll {
-						proxy.scrollTo("bottom-anchor", anchor: .bottom)
+					if autoScroll, let last = filteredEntries.last {
+						proxy.scrollTo(last.id, anchor: .bottom)
 					}
 				}
 			}
+			.copyable(entries: filteredEntries, selection: selection)
 
 			HStack(spacing: 12) {
 				TextField("Filter…", text: $searchText)
@@ -52,6 +48,7 @@ struct LogView: View {
 
 				Button("Clear") {
 					model.clear()
+					selection.removeAll()
 				}
 				.controlSize(.small)
 			}
@@ -60,6 +57,35 @@ struct LogView: View {
 			.background(Color(NSColor.windowBackgroundColor))
 		}
 		.frame(minWidth: 400, minHeight: 300)
+	}
+}
+
+// Cmd+C support for selected log entries
+private struct CopyableModifier: ViewModifier {
+	let entries: [LogEntry]
+	let selection: Set<UUID>
+
+	private static let timeFormatter: DateFormatter = {
+		let f = DateFormatter()
+		f.dateFormat = "HH:mm:ss.SSS"
+		return f
+	}()
+
+	func body(content: Content) -> some View {
+		content.onCopyCommand {
+			let selected = entries.filter { selection.contains($0.id) }
+			guard !selected.isEmpty else { return [] }
+			let text = selected.map { entry in
+				"\(CopyableModifier.timeFormatter.string(from: entry.date)) [\(entry.source)] \(entry.message)"
+			}.joined(separator: "\n")
+			return [NSItemProvider(object: text as NSString)]
+		}
+	}
+}
+
+private extension View {
+	func copyable(entries: [LogEntry], selection: Set<UUID>) -> some View {
+		modifier(CopyableModifier(entries: entries, selection: selection))
 	}
 }
 

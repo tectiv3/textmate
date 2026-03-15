@@ -48,6 +48,7 @@ import Combine
 		window.collectionBehavior = [.fullScreenAuxiliary]
 		window.ignoresMouseEvents = true
 		window.hasShadow = false
+		window.alphaValue = 0
 
 		window.contentView = hostingView
 		windowController = NSWindowController(window: window)
@@ -58,9 +59,14 @@ import Combine
 				guard let self, let window = self.windowController?.window else { return }
 				if toast != nil {
 					self.repositionWindow(window)
-					window.orderFrontRegardless()
 					window.ignoresMouseEvents = false
+					// Defer ordering front so SwiftUI renders the toast content first
+					DispatchQueue.main.async {
+						window.alphaValue = 1
+						window.orderFrontRegardless()
+					}
 				} else {
+					window.alphaValue = 0
 					window.orderOut(nil)
 					window.ignoresMouseEvents = true
 				}
@@ -71,7 +77,6 @@ import Combine
 	private func repositionWindow(_ window: NSWindow) {
 		guard let screen = NSScreen.main else { return }
 		let screenRect = screen.visibleFrame
-		// Use full screen width so SwiftUI content can self-size centered
 		let frame = NSRect(x: screenRect.origin.x,
 		                   y: screenRect.origin.y,
 		                   width: screenRect.width,
