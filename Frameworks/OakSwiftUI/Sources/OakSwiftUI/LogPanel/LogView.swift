@@ -26,6 +26,7 @@ struct LogView: View {
 						.frame(height: 1)
 						.id("bottom-anchor")
 				}
+				.textSelection(.enabled)
 				.listStyle(PlainListStyle())
 				.onChange(of: model.entries.count) { _, _ in
 					if autoScroll {
@@ -117,7 +118,6 @@ struct LogRow: View {
 			Text(entry.message)
 				.font(.system(size: 12, design: .monospaced))
 				.foregroundColor(messageColor)
-				.textSelection(.enabled)
 				.fixedSize(horizontal: false, vertical: true)
 		}
 		.padding(.vertical, 1)

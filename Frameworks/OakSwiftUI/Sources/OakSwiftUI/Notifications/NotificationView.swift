@@ -10,17 +10,17 @@ struct NotificationView: View {
 				HStack(spacing: 12) {
 					Image(systemName: iconName(for: toast.type))
 						.font(.system(size: 18))
-						.foregroundColor(color(for: toast.type))
+						.foregroundStyle(color(for: toast.type))
 					Text(toast.message)
 						.font(.system(size: 14, weight: .medium))
-						.foregroundColor(.primary)
+						.foregroundStyle(.white)
 						.lineLimit(2)
 				}
 				.padding(.horizontal, 20)
 				.padding(.vertical, 14)
-				.background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
-				.cornerRadius(12)
-				.shadow(color: .black.opacity(0.2), radius: 8, y: 2)
+				.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+				.environment(\.colorScheme, .dark)
+				.shadow(color: .black.opacity(0.3), radius: 10, y: 3)
 				.transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
 				                        removal: .opacity))
 				.onTapGesture {

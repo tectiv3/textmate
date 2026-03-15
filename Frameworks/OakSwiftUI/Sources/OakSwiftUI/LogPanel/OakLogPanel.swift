@@ -35,10 +35,14 @@ import SwiftUI
 			                      styleMask: [.titled, .closable, .miniaturizable, .resizable],
 			                      backing: .buffered, defer: false)
 			window.title = "LSP Log"
-			window.center()
-			window.setFrameAutosaveName("OakLSPLogWindow")
 			window.contentViewController = hostingController
 			window.contentMinSize = NSSize(width: 400, height: 300)
+
+			// Restore saved frame, fall back to centering on first use
+			if !window.setFrameUsingName("OakLSPLogWindow") {
+				window.center()
+			}
+			window.setFrameAutosaveName("OakLSPLogWindow")
 
 			windowController = NSWindowController(window: window)
 		}
