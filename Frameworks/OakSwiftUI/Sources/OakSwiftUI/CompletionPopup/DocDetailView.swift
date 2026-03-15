@@ -10,14 +10,15 @@ struct DocDetailView: View {
 				.font(.system(size: max(theme.fontSize - 1, 10)))
 				.lineLimit(nil)
 				.frame(maxWidth: .infinity, alignment: .leading)
-				.padding(10)
+				.padding(.horizontal, 12)
+				.padding(.vertical, 10)
 		}
 		.frame(width: 260)
 	}
 
 	private var attributedDocumentation: AttributedString {
 		var result = AttributedString()
-		let lines = documentation.components(separatedBy: "\n")
+		let lines = preprocessedLines
 		var inCodeBlock = false
 
 		for (index, line) in lines.enumerated() {
@@ -40,6 +41,19 @@ struct DocDetailView: View {
 			}
 		}
 		return result
+	}
+
+	private var preprocessedLines: [String] {
+		documentation.components(separatedBy: "\n").filter { line in
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+			// Strip FQN symbol name lines: __ClassName__ or _Namespace\Class::method_
+			if let _ = trimmed.range(of: #"^_{1,2}[a-zA-Z_\\][a-zA-Z0-9_:\\]*_{1,2}$"#, options: .regularExpression) {
+				return false
+			}
+			// Strip <?php lines from Intelephense code blocks
+			if trimmed == "<?php" { return false }
+			return true
+		}
 	}
 
 	private func parseInlineMarkdown(_ text: String) -> AttributedString {
