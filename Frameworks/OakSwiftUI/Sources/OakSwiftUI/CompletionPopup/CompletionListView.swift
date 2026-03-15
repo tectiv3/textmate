@@ -47,7 +47,7 @@ struct CompletionListView: View {
 
 	private var docPanel: some View {
 		Group {
-			if let docs = viewModel.resolvedDocumentation, !docs.isEmpty {
+			if let docs = viewModel.resolvedDocumentation, docs.length > 0 {
 				DocDetailView(documentation: docs)
 					.transition(.opacity)
 			} else {

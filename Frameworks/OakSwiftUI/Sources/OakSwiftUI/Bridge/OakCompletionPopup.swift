@@ -82,7 +82,7 @@ import Combine
 		resizePanelToFit()
 	}
 
-	@objc public func resolveCompleted(for item: OakCompletionItem, documentation: String?, insertText: String?) {
+	@objc public func resolveCompleted(for item: OakCompletionItem, documentation: NSAttributedString?, insertText: String?) {
 		if let newInsert = insertText, !newInsert.isEmpty {
 			item.updateInsertText(newInsert)
 		}

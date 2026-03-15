@@ -5,7 +5,7 @@ import Combine
 public class CompletionViewModel: ObservableObject {
 	@Published public private(set) var filteredItems: [OakCompletionItem] = []
 	@Published public var selectedIndex: Int = 0
-	@Published public private(set) var resolvedDocumentation: String?
+	@Published public private(set) var resolvedDocumentation: NSAttributedString?
 
 	private var allItems: [OakCompletionItem] = []
 	private var currentFilter: String = ""
@@ -46,7 +46,7 @@ public class CompletionViewModel: ObservableObject {
 		return filteredItems[selectedIndex]
 	}
 
-	public func resolveCompleted(for item: OakCompletionItem, documentation: String?) {
+	public func resolveCompleted(for item: OakCompletionItem, documentation: NSAttributedString?) {
 		item.documentation = documentation
 		item.isResolved = true
 		if item === selectedItem {

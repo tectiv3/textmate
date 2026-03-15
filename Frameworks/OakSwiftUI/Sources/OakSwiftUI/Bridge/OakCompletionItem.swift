@@ -8,7 +8,7 @@ import AppKit
 	@objc public let kind: Int
 	@objc public var icon: NSImage?
 	@objc public var isSnippet: Bool = false
-	@objc public var documentation: String?
+	@objc public var documentation: NSAttributedString?
 	@objc public var originalItem: NSDictionary?
 	@objc public var isResolved: Bool = false
 

@@ -5463,15 +5463,15 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		if(!strongSelf || !resolved)
 			return;
 
-		NSString* documentation = nil;
+		NSString* rawDocumentation = nil;
 		id docValue = resolved[@"documentation"];
 		if([docValue isKindOfClass:[NSString class]])
 		{
-			documentation = docValue;
+			rawDocumentation = docValue;
 		}
 		else if([docValue isKindOfClass:[NSDictionary class]])
 		{
-			documentation = docValue[@"value"];
+			rawDocumentation = docValue[@"value"];
 		}
 
 		NSString* newInsertText = nil;
@@ -5481,7 +5481,10 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 			newInsertText = resolved[@"textEdit"][@"newText"];
 
 		dispatch_async(dispatch_get_main_queue(), ^{
-			[strongSelf->_lspCompletionPopup resolveCompletedFor:item documentation:documentation insertText:newInsertText];
+			NSAttributedString* parsedDocs = nil;
+			if(rawDocumentation.length > 0)
+				parsedDocs = [strongSelf parseMarkdownToAttributedString:rawDocumentation];
+			[strongSelf->_lspCompletionPopup resolveCompletedFor:item documentation:parsedDocs insertText:newInsertText];
 		});
 	}];
 }

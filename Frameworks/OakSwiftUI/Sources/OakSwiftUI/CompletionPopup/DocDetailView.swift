@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct DocDetailView: View {
-	let documentation: String
+	let documentation: NSAttributedString
 	@EnvironmentObject var theme: OakThemeEnvironment
 
 	var body: some View {
 		ScrollView {
-			Text(attributedDocumentation)
+			Text(AttributedString(documentation))
 				.font(.system(size: max(theme.fontSize - 1, 10)))
 				.lineLimit(nil)
 				.frame(maxWidth: .infinity, alignment: .leading)
@@ -14,84 +14,5 @@ struct DocDetailView: View {
 				.padding(.vertical, 10)
 		}
 		.frame(width: 260)
-	}
-
-	private var attributedDocumentation: AttributedString {
-		var result = AttributedString()
-		let lines = preprocessedLines
-		var inCodeBlock = false
-
-		for (index, line) in lines.enumerated() {
-			if index > 0 {
-				result.append(AttributedString("\n"))
-			}
-
-			if line.hasPrefix("```") {
-				inCodeBlock.toggle()
-				continue
-			}
-
-			if inCodeBlock {
-				var codeLine = AttributedString(line)
-				codeLine.font = .system(size: theme.fontSize, design: .monospaced)
-				codeLine.foregroundColor = .primary
-				result.append(codeLine)
-			} else {
-				result.append(parseInlineMarkdown(line))
-			}
-		}
-		return result
-	}
-
-	private var preprocessedLines: [String] {
-		documentation.components(separatedBy: "\n").filter { line in
-			let trimmed = line.trimmingCharacters(in: .whitespaces)
-			// Strip FQN symbol name lines: __ClassName__ or _Namespace\Class::method_
-			if let _ = trimmed.range(of: #"^_{1,2}[a-zA-Z_\\][a-zA-Z0-9_:\\]*_{1,2}$"#, options: .regularExpression) {
-				return false
-			}
-			// Strip <?php lines from Intelephense code blocks
-			if trimmed == "<?php" { return false }
-			return true
-		}
-	}
-
-	private func parseInlineMarkdown(_ text: String) -> AttributedString {
-		var result = AttributedString()
-		var i = text.startIndex
-
-		while i < text.endIndex {
-			if text[i] == "`" {
-				let codeStart = text.index(after: i)
-				if codeStart < text.endIndex, let codeEnd = text[codeStart...].firstIndex(of: "`") {
-					var code = AttributedString(String(text[codeStart..<codeEnd]))
-					code.font = .system(size: max(theme.fontSize - 1, 10), design: .monospaced)
-					code.foregroundColor = .primary
-					result.append(code)
-					i = text.index(after: codeEnd)
-					continue
-				}
-			}
-
-			if text[i] == "*" {
-				let next = text.index(after: i)
-				if next < text.endIndex && text[next] == "*" {
-					let boldStart = text.index(after: next)
-					if boldStart < text.endIndex, let range = text[boldStart...].range(of: "**") {
-						var bold = AttributedString(String(text[boldStart..<range.lowerBound]))
-						bold.font = .system(size: max(theme.fontSize - 1, 10), weight: .bold)
-						result.append(bold)
-						i = range.upperBound
-						continue
-					}
-				}
-			}
-
-			var plain = AttributedString(String(text[i]))
-			plain.foregroundColor = .secondary
-			result.append(plain)
-			i = text.index(after: i)
-		}
-		return result
 	}
 }
