@@ -115,7 +115,10 @@ using json = nlohmann::json;
 - (void)sendMessage:(json const&)message
 {
 	if(!_task.isRunning)
+	{
+		[self logLSP:@"Message dropped: server not running"];
 		return;
+	}
 
 	std::string body = message.dump();
 	NSString* header = [NSString stringWithFormat:@"Content-Length: %lu\r\n\r\n", (unsigned long)body.size()];
@@ -337,10 +340,13 @@ using json = nlohmann::json;
 		}
 		else if(method == "textDocument/publishDiagnostics")
 		{
+			auto const& diags = msg["params"]["diagnostics"];
+			[self logLSP:@"<-- publishDiagnostics: %lu items", (unsigned long)diags.size()];
 			[self handleDiagnostics:msg["params"]];
 		}
 		else if(method == "window/showMessage")
 		{
+			[self logLSP:@"<-- showMessage: %s", msg["params"].dump().c_str()];
 			[self handleShowMessage:msg["params"]];
 		}
 		else if(method == "window/logMessage")
@@ -349,6 +355,7 @@ using json = nlohmann::json;
 		}
 		else if(method == "$/progress")
 		{
+			[self logLSP:@"<-- progress: %s", msg["params"].dump().c_str()];
 			[self handleProgress:msg["params"]];
 		}
 		else
@@ -576,7 +583,7 @@ using json = nlohmann::json;
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	NSLog(@"[LSP] --> %s (id=%d) params=%s", method.UTF8String, reqId, params.dump().c_str());
+	[self logLSP:@"--> %s (id=%d)", method.UTF8String, reqId];
 	if(callback)
 		_responseCallbacks[@(reqId)] = [callback copy];
 	[self sendMessage:msg];

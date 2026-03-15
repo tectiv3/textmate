@@ -48,7 +48,7 @@
 
 - (void)handleShowMessage:(NSNotification*)note
 {
-	NSString* message = note.userInfo[@"message"];
+	NSString* message = [note.userInfo[@"message"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 	NSNumber* type = note.userInfo[@"type"];
 	if(!message || message.length == 0) return;
 
@@ -66,16 +66,16 @@
 - (void)handleProgress:(NSNotification*)note
 {
 	NSString* kind = note.userInfo[@"kind"];
-	NSString* title = note.userInfo[@"title"];
-	NSString* message = note.userInfo[@"message"];
+	NSString* title = [note.userInfo[@"title"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+	NSString* message = [note.userInfo[@"message"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 	NSNumber* percentage = note.userInfo[@"percentage"];
 
 	if([kind isEqualToString:@"end"])
 		return;
 
 	NSMutableString* display = [NSMutableString string];
-	if(title) [display appendString:title];
-	if(message) {
+	if(title.length > 0) [display appendString:title];
+	if(message.length > 0) {
 		if(display.length > 0) [display appendString:@": "];
 		[display appendString:message];
 	}

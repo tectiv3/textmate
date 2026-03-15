@@ -13,7 +13,10 @@ import Combine
 	private override init() {}
 
 	@objc public func show(message: String, type: Int) {
-		let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+		var controlAndWhitespace = CharacterSet.whitespacesAndNewlines
+		controlAndWhitespace.formUnion(.controlCharacters)
+		controlAndWhitespace.insert(charactersIn: "\u{200B}\u{200C}\u{200D}\u{FEFF}")
+		let trimmed = message.trimmingCharacters(in: controlAndWhitespace)
 		guard !trimmed.isEmpty else { return }
 
 		let toastType: ToastType

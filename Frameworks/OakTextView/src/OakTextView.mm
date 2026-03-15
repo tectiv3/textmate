@@ -5113,6 +5113,19 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 	if(!documentView)
 		return;
 
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	BOOL isExplicitTrigger = !_lspCompletionPopup || ![_lspCompletionPopup isVisible];
+
+	if(![[LSPManager sharedManager] hasClientForDocument:doc])
+	{
+		if(isExplicitTrigger)
+			[OakNotificationManager.shared showWithMessage:@"No LSP server for this document" type:3];
+		return;
+	}
+
 	size_t caret = documentView->ranges().last().last.index;
 	text::pos_t pos = documentView->convert(caret);
 
@@ -5124,10 +5137,6 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		--prefixStart;
 	NSString* prefix = to_ns(lineText.substr(prefixStart));
 
-	OakDocument* doc = self.document;
-	if(!doc)
-		return;
-
 	[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
 
 	__weak OakTextView* weakSelf = self;
@@ -5138,8 +5147,15 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		prefix:prefix
 		completion:^(NSArray<NSDictionary*>* suggestions) {
 			OakTextView* strongSelf = weakSelf;
-			if(!strongSelf || suggestions.count == 0)
+			if(!strongSelf)
 				return;
+
+			if(suggestions.count == 0)
+			{
+				if(isExplicitTrigger)
+					[OakNotificationManager.shared showWithMessage:@"No completions available" type:3];
+				return;
+			}
 
 			[strongSelf showLSPCompletionPopupWithSuggestions:suggestions prefixLength:prefixLen];
 		}];
