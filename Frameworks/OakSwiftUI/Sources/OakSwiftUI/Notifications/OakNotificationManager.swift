@@ -46,7 +46,8 @@ import Combine
 		window.isOpaque = false
 		window.backgroundColor = .clear
 		window.level = .floating
-		window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+		window.hidesOnDeactivate = true
+		window.collectionBehavior = [.fullScreenAuxiliary]
 		window.ignoresMouseEvents = true
 		window.hasShadow = false
 

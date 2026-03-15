@@ -917,6 +917,10 @@ static std::string shell_quote (std::vector<std::string> paths)
 		self.choiceMenu = nil;
 		choiceVector.clear();
 
+		[_lspCompletionPopup dismiss];
+		[_lspHoverTooltip dismiss];
+		[_lspReferencesPanel close];
+
 		documentView.reset();
 	}
 
