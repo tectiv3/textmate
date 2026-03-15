@@ -19,6 +19,8 @@ struct NotificationView: View {
 				.id(toast.id)
 				.padding(.horizontal, 20)
 				.padding(.vertical, 14)
+				.frame(maxWidth: 500)
+				.fixedSize()
 				.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
 				.environment(\.colorScheme, .dark)
 				.shadow(color: .black.opacity(0.3), radius: 10, y: 3)
@@ -29,6 +31,7 @@ struct NotificationView: View {
 				}
 			}
 		}
+		.frame(maxWidth: .infinity)
 		.animation(.easeInOut(duration: 0.3), value: model.currentToast)
 		.padding(.bottom, 8)
 	}

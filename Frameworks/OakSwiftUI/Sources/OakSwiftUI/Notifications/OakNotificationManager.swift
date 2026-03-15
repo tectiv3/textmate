@@ -29,9 +29,6 @@ import Combine
 		}
 		self.ensureWindow()
 		self.model.show(message: trimmed, type: toastType)
-		// Force the panel to redraw — borderless NSHostingView can go stale after idle
-		self.windowController?.window?.orderFrontRegardless()
-		self.windowController?.window?.displayIfNeeded()
 	}
 
 	private func ensureWindow() {
@@ -39,8 +36,9 @@ import Combine
 
 		let view = NotificationView(model: model)
 		let hostingView = NSHostingView(rootView: view)
+		hostingView.autoresizingMask = [.width, .height]
 
-		let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 500, height: 80),
+		let window = NSPanel(contentRect: .zero,
 		                     styleMask: [.borderless, .nonactivatingPanel],
 		                     backing: .buffered, defer: false)
 		window.isOpaque = false
@@ -51,22 +49,33 @@ import Combine
 		window.ignoresMouseEvents = true
 		window.hasShadow = false
 
-		if let screen = NSScreen.main {
-			let screenRect = screen.visibleFrame
-			let x = screenRect.midX - 250
-			let y = screenRect.origin.y + 40
-			window.setFrameOrigin(NSPoint(x: x, y: y))
-		}
-
 		window.contentView = hostingView
 		windowController = NSWindowController(window: window)
-		windowController?.showWindow(nil)
 
 		model.$currentToast
 			.receive(on: DispatchQueue.main)
-			.sink { [weak window] toast in
-				window?.ignoresMouseEvents = (toast == nil)
+			.sink { [weak self] toast in
+				guard let self, let window = self.windowController?.window else { return }
+				if toast != nil {
+					self.repositionWindow(window)
+					window.orderFrontRegardless()
+					window.ignoresMouseEvents = false
+				} else {
+					window.orderOut(nil)
+					window.ignoresMouseEvents = true
+				}
 			}
 			.store(in: &cancellables)
+	}
+
+	private func repositionWindow(_ window: NSWindow) {
+		guard let screen = NSScreen.main else { return }
+		let screenRect = screen.visibleFrame
+		// Use full screen width so SwiftUI content can self-size centered
+		let frame = NSRect(x: screenRect.origin.x,
+		                   y: screenRect.origin.y,
+		                   width: screenRect.width,
+		                   height: 100)
+		window.setFrame(frame, display: false)
 	}
 }
