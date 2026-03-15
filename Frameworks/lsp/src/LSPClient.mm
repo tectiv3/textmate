@@ -10,6 +10,19 @@ NSString* const LSPProgressNotification = @"LSPProgressNotification";
 
 using json = nlohmann::json;
 
+static NSString* fileFromURI (std::string const& uri)
+{
+	auto slash = uri.rfind('/');
+	return slash != std::string::npos ? @(uri.substr(slash + 1).c_str()) : @(uri.c_str());
+}
+
+static NSString* fileFromParams (json const& params)
+{
+	if(params.contains("textDocument") && params["textDocument"].contains("uri"))
+		return fileFromURI(params["textDocument"]["uri"].get<std::string>());
+	return nil;
+}
+
 @interface LSPClient ()
 {
 	NSTask* _task;
@@ -24,6 +37,7 @@ using json = nlohmann::json;
 	NSString* _workingDirectory;
 	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
+	NSMutableDictionary<NSNumber*, NSString*>* _requestMethods;
 }
 - (void)openDocument:(OakDocument*)document languageId:(NSString*)languageId retryCount:(int)retryCount;
 @end
@@ -45,6 +59,7 @@ using json = nlohmann::json;
 		_nextRequestId = 1;
 		_initialized = NO;
 		_responseCallbacks = [NSMutableDictionary new];
+		_requestMethods    = [NSMutableDictionary new];
 
 		_stdinPipe  = [NSPipe pipe];
 		_stdoutPipe = [NSPipe pipe];
@@ -104,6 +119,7 @@ using json = nlohmann::json;
 {
 	NSDictionary<NSNumber*, void(^)(id)>* callbacks = [_responseCallbacks copy];
 	[_responseCallbacks removeAllObjects];
+	[_requestMethods removeAllObjects];
 	for(NSNumber* key in callbacks)
 	{
 		void(^callback)(id) = callbacks[key];
@@ -116,7 +132,7 @@ using json = nlohmann::json;
 {
 	if(!_task.isRunning)
 	{
-		[self logLSP:@"Message dropped: server not running"];
+		[self postLog:@"Message dropped — server not running" source:@"error"];
 		return;
 	}
 
@@ -129,30 +145,37 @@ using json = nlohmann::json;
 	@try {
 		[_stdinPipe.fileHandleForWriting writeData:data];
 	} @catch(NSException* e) {
-		[self logLSP:@"Write failed: %@", e.reason];
+		[self postLog:[NSString stringWithFormat:@"Write failed: %@", e.reason] source:@"error"];
 	}
 }
 
 - (void)sendRequest:(NSString*)method params:(json)params
 {
+	int reqId = _nextRequestId++;
+	_requestMethods[@(reqId)] = method;
 	json msg = {
 		{"jsonrpc", "2.0"},
-		{"id",      _nextRequestId++},
+		{"id",      reqId},
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	[self logLSP:@"--> %s (id=%d)", method.UTF8String, _nextRequestId - 1];
+	[self postLog:[NSString stringWithFormat:@"%@ (id=%d)", method, reqId] source:@"request"];
 	[self sendMessage:msg];
 }
 
 - (void)sendNotification:(NSString*)method params:(json)params
 {
+	NSMutableString* logMsg = [NSMutableString stringWithString:method];
+	NSString* file = fileFromParams(params);
+	if(file)
+		[logMsg appendFormat:@"  %@", file];
+
 	json msg = {
 		{"jsonrpc", "2.0"},
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	[self logLSP:@"--> %s", method.UTF8String];
+	[self postLog:logMsg source:@"notify"];
 	[self sendMessage:msg];
 }
 
@@ -240,15 +263,13 @@ using json = nlohmann::json;
 
 // MARK: - Message dispatch
 
-- (void)logLSP:(NSString*)format, ... NS_FORMAT_FUNCTION(1,2)
+- (void)postLog:(NSString*)message source:(NSString*)source
 {
-	va_list args;
-	va_start(args, format);
-	NSString* message = [[NSString alloc] initWithFormat:format arguments:args];
-	va_end(args);
-
 	NSLog(@"[LSP] %@", message);
-	[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{@"message": message}];
+	[[NSNotificationCenter defaultCenter] postNotificationName:LSPLogNotification object:self userInfo:@{
+		@"message": message,
+		@"source":  source
+	}];
 }
 
 - (void)handleShowMessage:(json const&)params
@@ -330,7 +351,7 @@ using json = nlohmann::json;
 		if(msg.contains("id"))
 		{
 			// Server-initiated request — must reply or server will hang
-			[self logLSP:@"<-- request: %s (id=%s)", method.c_str(), msg["id"].dump().c_str()];
+			[self postLog:[NSString stringWithFormat:@"%s (id=%s)", method.c_str(), msg["id"].dump().c_str()] source:@"event"];
 			json response = {
 				{"jsonrpc", "2.0"},
 				{"id",      msg["id"]},
@@ -341,12 +362,16 @@ using json = nlohmann::json;
 		else if(method == "textDocument/publishDiagnostics")
 		{
 			auto const& diags = msg["params"]["diagnostics"];
-			[self logLSP:@"<-- publishDiagnostics: %lu items", (unsigned long)diags.size()];
+			NSString* file = fileFromURI(msg["params"]["uri"].get<std::string>());
+			[self postLog:[NSString stringWithFormat:@"publishDiagnostics  %@  %lu items", file, (unsigned long)diags.size()] source:@"event"];
 			[self handleDiagnostics:msg["params"]];
 		}
 		else if(method == "window/showMessage")
 		{
-			[self logLSP:@"<-- showMessage: %s", msg["params"].dump().c_str()];
+			std::string text = msg["params"].contains("message") ? msg["params"]["message"].get<std::string>() : "";
+			int type = msg["params"].contains("type") ? msg["params"]["type"].get<int>() : 3;
+			static char const* const typeNames[] = { "?", "Error", "Warning", "Info", "Log" };
+			[self postLog:[NSString stringWithFormat:@"showMessage [%s] %s", typeNames[type < 5 ? type : 0], text.c_str()] source:@"event"];
 			[self handleShowMessage:msg["params"]];
 		}
 		else if(method == "window/logMessage")
@@ -355,23 +380,36 @@ using json = nlohmann::json;
 		}
 		else if(method == "$/progress")
 		{
-			[self logLSP:@"<-- progress: %s", msg["params"].dump().c_str()];
+			auto const& val = msg["params"]["value"];
+			std::string kind = val.contains("kind") ? val["kind"].get<std::string>() : "?";
+			std::string title = val.contains("title") ? val["title"].get<std::string>() : "";
+			std::string pmsg = val.contains("message") ? val["message"].get<std::string>() : "";
+			NSMutableString* logMsg = [NSMutableString stringWithFormat:@"progress/%s", kind.c_str()];
+			if(!title.empty())
+				[logMsg appendFormat:@"  %s", title.c_str()];
+			if(!pmsg.empty())
+				[logMsg appendFormat:@": %s", pmsg.c_str()];
+			if(val.contains("percentage"))
+				[logMsg appendFormat:@" (%d%%)", val["percentage"].get<int>()];
+			[self postLog:logMsg source:@"event"];
 			[self handleProgress:msg["params"]];
 		}
 		else
 		{
-			[self logLSP:@"<-- notification: %s %s", method.c_str(), msg.contains("params") ? msg["params"].dump().c_str() : ""];
+			[self postLog:[NSString stringWithFormat:@"%s", method.c_str()] source:@"event"];
 		}
 	}
 	else if(msg.contains("id"))
 	{
 		int reqId = msg["id"].get<int>();
-		[self logLSP:@"<-- response id=%d", reqId];
+		NSString* method = _requestMethods[@(reqId)];
+		[_requestMethods removeObjectForKey:@(reqId)];
 
 		if(msg.contains("error"))
 		{
 			auto const& err = msg["error"];
-			[self logLSP:@"Error %d: %s", err["code"].get<int>(), err["message"].get<std::string>().c_str()];
+			[self postLog:[NSString stringWithFormat:@"%@ (id=%d) error %d: %s",
+				method ?: @"?", reqId, err["code"].get<int>(), err["message"].get<std::string>().c_str()] source:@"error"];
 
 			NSNumber* key = @(reqId);
 			void(^callback)(id) = _responseCallbacks[key];
@@ -384,7 +422,8 @@ using json = nlohmann::json;
 		else if(!_initialized && msg.contains("result"))
 		{
 			_initialized = YES;
-			[self logLSP:@"Server initialized successfully"];
+
+			NSMutableString* logMsg = [NSMutableString stringWithFormat:@"%@ (id=%d) initialized", method ?: @"initialize", reqId];
 			[self sendNotification:@"initialized" params:json::object()];
 
 			if(msg["result"].contains("capabilities"))
@@ -392,18 +431,57 @@ using json = nlohmann::json;
 				auto const& caps = msg["result"]["capabilities"];
 				_documentFormattingProvider = caps.contains("documentFormattingProvider") && !caps["documentFormattingProvider"].is_null() && (caps["documentFormattingProvider"].is_boolean() ? caps["documentFormattingProvider"].get<bool>() : true);
 				_documentRangeFormattingProvider = caps.contains("documentRangeFormattingProvider") && !caps["documentRangeFormattingProvider"].is_null() && (caps["documentRangeFormattingProvider"].is_boolean() ? caps["documentRangeFormattingProvider"].get<bool>() : true);
-				[self logLSP:@"Capabilities: formatting=%d rangeFormatting=%d", _documentFormattingProvider, _documentRangeFormattingProvider];
+				[logMsg appendFormat:@"  formatting=%d rangeFormatting=%d", _documentFormattingProvider, _documentRangeFormattingProvider];
 			}
+			[self postLog:logMsg source:@"response"];
 		}
 		else if(msg.contains("result"))
 		{
+			NSMutableString* logMsg = [NSMutableString stringWithFormat:@"%@ (id=%d)", method ?: @"?", reqId];
+
+			// Summarize result based on method
+			auto const& result = msg["result"];
+			if([method isEqualToString:@"textDocument/completion"])
+			{
+				size_t count = result.is_array() ? result.size() : (result.contains("items") ? result["items"].size() : 0);
+				[logMsg appendFormat:@"  %lu items", (unsigned long)count];
+			}
+			else if([method isEqualToString:@"completionItem/resolve"])
+			{
+				if(result.contains("label"))
+					[logMsg appendFormat:@"  \"%s\"", result["label"].get<std::string>().c_str()];
+				if(result.contains("detail"))
+					[logMsg appendFormat:@"  %s", result["detail"].get<std::string>().c_str()];
+			}
+			else if([method isEqualToString:@"textDocument/definition"])
+			{
+				size_t count = result.is_array() ? result.size() : (result.is_object() ? 1 : 0);
+				[logMsg appendFormat:@"  %lu location%s", (unsigned long)count, count == 1 ? "" : "s"];
+			}
+			else if([method isEqualToString:@"textDocument/hover"])
+			{
+				[logMsg appendFormat:@"  %s", result.is_null() ? "empty" : "content"];
+			}
+			else if([method isEqualToString:@"textDocument/references"])
+			{
+				size_t count = result.is_array() ? result.size() : 0;
+				[logMsg appendFormat:@"  %lu ref%s", (unsigned long)count, count == 1 ? "" : "s"];
+			}
+			else if([method isEqualToString:@"textDocument/formatting"] || [method isEqualToString:@"textDocument/rangeFormatting"])
+			{
+				size_t count = result.is_array() ? result.size() : 0;
+				[logMsg appendFormat:@"  %lu edit%s", (unsigned long)count, count == 1 ? "" : "s"];
+			}
+
+			[self postLog:logMsg source:@"response"];
+
 			NSNumber* key = @(reqId);
 			void(^callback)(id) = _responseCallbacks[key];
 			if(callback)
 			{
 				[_responseCallbacks removeObjectForKey:key];
-				id result = [self convertJSON:msg["result"]];
-				callback(result);
+				id resultObj = [self convertJSON:result];
+				callback(resultObj);
 			}
 		}
 	}
@@ -577,13 +655,24 @@ using json = nlohmann::json;
 - (int)sendRequest:(NSString*)method params:(json)params callback:(void(^)(id))callback
 {
 	int reqId = _nextRequestId++;
+	_requestMethods[@(reqId)] = method;
+
+	NSMutableString* logMsg = [NSMutableString stringWithFormat:@"%@ (id=%d)", method, reqId];
+	NSString* file = fileFromParams(params);
+	if(file)
+		[logMsg appendFormat:@"  %@", file];
+	if(params.contains("position"))
+		[logMsg appendFormat:@":%d:%d", params["position"]["line"].get<int>(), params["position"]["character"].get<int>()];
+	if(params.contains("label"))
+		[logMsg appendFormat:@"  \"%s\"", params["label"].get<std::string>().c_str()];
+
 	json msg = {
 		{"jsonrpc", "2.0"},
 		{"id",      reqId},
 		{"method",  method.UTF8String},
 		{"params",  params}
 	};
-	[self logLSP:@"--> %s (id=%d)", method.UTF8String, reqId];
+	[self postLog:logMsg source:@"request"];
 	if(callback)
 		_responseCallbacks[@(reqId)] = [callback copy];
 	[self sendMessage:msg];

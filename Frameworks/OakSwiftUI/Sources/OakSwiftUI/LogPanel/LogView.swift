@@ -18,26 +18,10 @@ struct LogView: View {
 			ScrollViewReader { proxy in
 				List {
 					ForEach(filteredEntries) { entry in
-						VStack(alignment: .leading, spacing: 2) {
-							HStack {
-								Text(entry.source)
-									.font(.caption)
-									.fontWeight(.bold)
-									.foregroundColor(.secondary)
-								Text(entry.date, style: .time)
-									.font(.caption)
-									.foregroundColor(.secondary)
-								Spacer()
-							}
-							Text(entry.message)
-								.font(.system(.body, design: .monospaced))
-								.fixedSize(horizontal: false, vertical: true)
-								.textSelection(.enabled)
-						}
-						.padding(.vertical, 4)
-						.id(entry.id)
+						LogRow(entry: entry)
+							.id(entry.id)
+							.listRowSeparator(.hidden)
 					}
-					// Invisible anchor at the very end so scrollTo lands below the last real row
 					Color.clear
 						.frame(height: 1)
 						.id("bottom-anchor")
@@ -57,21 +41,85 @@ struct LogView: View {
 				}
 			}
 
-			HStack {
-				TextField("Search...", text: $searchText)
+			HStack(spacing: 12) {
+				TextField("Filter…", text: $searchText)
 					.textFieldStyle(RoundedBorderTextFieldStyle())
 
-				Toggle("Auto", isOn: $autoScroll)
+				Toggle("Auto-scroll", isOn: $autoScroll)
 					.toggleStyle(.switch)
-					.help("Auto-scroll to bottom")
+					.controlSize(.small)
 
 				Button("Clear") {
 					model.clear()
 				}
+				.controlSize(.small)
 			}
-			.padding()
+			.padding(.horizontal, 12)
+			.padding(.vertical, 8)
 			.background(Color(NSColor.windowBackgroundColor))
 		}
 		.frame(minWidth: 400, minHeight: 300)
+	}
+}
+
+struct LogRow: View {
+	let entry: LogEntry
+
+	private static let timeFormatter: DateFormatter = {
+		let f = DateFormatter()
+		f.dateFormat = "HH:mm:ss.SSS"
+		return f
+	}()
+
+	private var arrow: String {
+		switch entry.source {
+		case "request": return "→"
+		case "notify":  return "→"
+		case "response": return "←"
+		case "event":   return "←"
+		case "server":  return "◇"
+		case "error":   return "✗"
+		default:        return "·"
+		}
+	}
+
+	private var arrowColor: Color {
+		switch entry.source {
+		case "request":  return .blue
+		case "notify":   return .cyan
+		case "response": return .green
+		case "event":    return .purple
+		case "server":   return .secondary
+		case "error":    return .red
+		default:         return .secondary
+		}
+	}
+
+	private var messageColor: Color {
+		switch entry.source {
+		case "error": return .red
+		case "server": return .secondary
+		default: return .primary
+		}
+	}
+
+	var body: some View {
+		HStack(alignment: .firstTextBaseline, spacing: 6) {
+			Text(arrow)
+				.font(.system(size: 12, weight: .bold, design: .monospaced))
+				.foregroundColor(arrowColor)
+				.frame(width: 14, alignment: .center)
+
+			Text(LogRow.timeFormatter.string(from: entry.date))
+				.font(.system(size: 11, design: .monospaced))
+				.foregroundColor(.secondary)
+
+			Text(entry.message)
+				.font(.system(size: 12, design: .monospaced))
+				.foregroundColor(messageColor)
+				.textSelection(.enabled)
+				.fixedSize(horizontal: false, vertical: true)
+		}
+		.padding(.vertical, 1)
 	}
 }

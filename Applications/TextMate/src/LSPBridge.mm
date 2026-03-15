@@ -41,7 +41,7 @@
 	dispatch_async(dispatch_get_main_queue(), ^{
 		[OakLogPanel.shared logWithMessage:message level:level source:source];
 
-		if([message containsString:@"Server initialized successfully"])
+		if([source isEqualToString:@"response"] && [message containsString:@"initialized"])
 			[OakNotificationManager.shared showWithMessage:@"LSP Server Initialized" type:4];
 	});
 }
