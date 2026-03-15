@@ -35,6 +35,7 @@ static NSString* fileFromParams (json const& params)
 	BOOL _documentFormattingProvider;
 	BOOL _documentRangeFormattingProvider;
 	BOOL _completionResolveProvider;
+	BOOL _renameProvider;
 	NSString* _workingDirectory;
 	NSString* _initOptionsJSON;
 	NSMutableDictionary<NSNumber*, void(^)(id)>* _responseCallbacks;
@@ -434,7 +435,8 @@ static NSString* fileFromParams (json const& params)
 				_documentRangeFormattingProvider = caps.contains("documentRangeFormattingProvider") && !caps["documentRangeFormattingProvider"].is_null() && (caps["documentRangeFormattingProvider"].is_boolean() ? caps["documentRangeFormattingProvider"].get<bool>() : true);
 				if(caps.contains("completionProvider") && caps["completionProvider"].contains("resolveProvider"))
 					_completionResolveProvider = caps["completionProvider"]["resolveProvider"].get<bool>();
-                [logMsg appendFormat:@"  formatting=%d rangeFormatting=%d completionResolve=%d", _documentFormattingProvider, _documentRangeFormattingProvider, _completionResolveProvider];
+				_renameProvider = caps.contains("renameProvider") && !caps["renameProvider"].is_null() && (caps["renameProvider"].is_boolean() ? caps["renameProvider"].get<bool>() : true);
+				[logMsg appendFormat:@"  formatting=%d rangeFormatting=%d completionResolve=%d rename=%d", _documentFormattingProvider, _documentRangeFormattingProvider, _completionResolveProvider, _renameProvider];
 			}
 			[self postLog:logMsg source:@"response"];
 		}
@@ -473,6 +475,22 @@ static NSString* fileFromParams (json const& params)
 			else if([method isEqualToString:@"textDocument/formatting"] || [method isEqualToString:@"textDocument/rangeFormatting"])
 			{
 				size_t count = result.is_array() ? result.size() : 0;
+				[logMsg appendFormat:@"  %lu edit%s", (unsigned long)count, count == 1 ? "" : "s"];
+			}
+			else if([method isEqualToString:@"textDocument/prepareRename"])
+			{
+				[logMsg appendFormat:@"  %s", result.is_null() ? "not renameable" : "renameable"];
+			}
+			else if([method isEqualToString:@"textDocument/rename"])
+			{
+				size_t count = 0;
+				if(result.contains("changes"))
+				{
+					for(auto& [uri, edits] : result["changes"].items())
+						count += edits.size();
+				}
+				else if(result.contains("documentChanges"))
+					count = result["documentChanges"].size();
 				[logMsg appendFormat:@"  %lu edit%s", (unsigned long)count, count == 1 ? "" : "s"];
 			}
 
@@ -549,6 +567,10 @@ static NSString* fileFromParams (json const& params)
 				{"hover", {
 					{"dynamicRegistration", false},
 					{"contentFormat", {"markdown", "plaintext"}}
+				}},
+				{"rename", {
+					{"dynamicRegistration", false},
+					{"prepareSupport", true}
 				}}
 			}}
 		}}
@@ -1011,6 +1033,61 @@ static NSString* fileFromParams (json const& params)
 
 		if(callback)
 			callback(locations);
+	}];
+}
+
+- (void)prepareRenameForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary* _Nullable))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}}
+	};
+
+	[self sendRequest:@"textDocument/prepareRename" params:params callback:^(id result) {
+		if(!result || [result isKindOfClass:[NSNull class]])
+		{
+			if(callback)
+				callback(nil);
+			return;
+		}
+
+		if(callback)
+			callback([result isKindOfClass:[NSDictionary class]] ? result : nil);
+	}];
+}
+
+- (void)requestRenameForURI:(NSString*)uri line:(NSUInteger)line character:(NSUInteger)character newName:(NSString*)newName completion:(void(^)(NSDictionary* _Nullable))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	json params = {
+		{"textDocument", {{"uri", uri.UTF8String}}},
+		{"position", {{"line", (int)line}, {"character", (int)character}}},
+		{"newName", newName.UTF8String}
+	};
+
+	[self sendRequest:@"textDocument/rename" params:params callback:^(id result) {
+		if(!result || [result isKindOfClass:[NSNull class]])
+		{
+			if(callback)
+				callback(nil);
+			return;
+		}
+
+		if(callback)
+			callback([result isKindOfClass:[NSDictionary class]] ? result : nil);
 	}];
 }
 

@@ -543,6 +543,63 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	return client && client.documentRangeFormattingProvider;
 }
 
+- (BOOL)serverSupportsRenameForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.renameProvider;
+}
+
+- (void)requestPrepareRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSDictionary* _Nullable))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client prepareRenameForURI:uri line:line character:character completion:callback];
+}
+
+- (void)requestRenameForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character newName:(NSString*)newName completion:(void(^)(NSDictionary* _Nullable))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSString* path = document.path;
+	if(!path)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	NSString* uri = fileURL.absoluteString;
+
+	[client requestRenameForURI:uri line:line character:character newName:newName completion:callback];
+}
+
 - (BOOL)hasClientForDocument:(OakDocument*)document
 {
 	return document && _documentClients[document.identifier] != nil;
