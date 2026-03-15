@@ -4,6 +4,10 @@
 #import <text/types.h>
 #import <io/path.h>
 #import <ns/ns.h>
+#import <OakFoundation/NSString Additions.h>
+
+NSString* const LSPDiagnosticsDidChangeNotification = @"LSPDiagnosticsDidChange";
+NSString* const LSPServerStatusDidChangeNotification = @"LSPServerStatusDidChange";
 
 static NSDictionary<NSString*, NSString*>* scopeToLanguageId ()
 {
@@ -222,6 +226,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	client = [[LSPClient alloc] initWithCommand:executable arguments:args workingDirectory:root initOptions:initOptsJSON];
 	client.delegate = self;
 	_clients[root] = client;
+	[NSNotificationCenter.defaultCenter postNotificationName:LSPServerStatusDidChangeNotification object:self];
 	return client;
 }
 
@@ -678,6 +683,96 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	return document && _documentClients[document.identifier] != nil;
 }
 
+- (NSDictionary<NSString*, NSNumber*>*)diagnosticCountsForDocument:(OakDocument*)document
+{
+	NSUInteger errors = 0, warnings = 0, info = 0;
+	NSString* path = document.path;
+	if(path)
+	{
+		NSURL* fileURL = [NSURL fileURLWithPath:path];
+		NSArray<NSDictionary*>* diags = _diagnosticsByURI[fileURL.absoluteString];
+		for(NSDictionary* diag in diags)
+		{
+			switch([diag[@"severity"] intValue])
+			{
+				case 1:  errors++;   break;
+				case 2:  warnings++; break;
+				case 3:
+				case 4:  info++;     break;
+				default: break;
+			}
+		}
+	}
+	return @{ @"errors": @(errors), @"warnings": @(warnings), @"info": @(info) };
+}
+
+- (NSString*)serverStatusForDocument:(OakDocument*)document
+{
+	LSPClient* client = _documentClients[document.identifier];
+	if(!client)
+		return nil;
+	if(client.initialized)
+		return @"running";
+	if(client.running)
+		return @"starting";
+	return nil;
+}
+
+- (NSString*)serverNameForDocument:(OakDocument*)document
+{
+	LSPClient* client = _documentClients[document.identifier];
+	if(!client)
+		return nil;
+
+	NSString* path = document.path;
+	if(!path)
+		return nil;
+
+	std::string filePath  = to_s(path);
+	std::string fileType  = to_s(document.fileType);
+	std::string directory = to_s(document.directory ?: [path stringByDeletingLastPathComponent]);
+
+	settings_t settings = settings_for_path(filePath, fileType, directory);
+	std::string lspCommand = settings.get("lspCommand", "");
+	if(lspCommand.empty())
+		return nil;
+
+	std::vector<std::string> parts = path::unescape(lspCommand);
+	if(parts.empty())
+		return nil;
+
+	return [[NSString stringWithCxxString:parts[0]] lastPathComponent];
+}
+
+- (void)restartServerForDocument:(OakDocument*)document
+{
+	LSPClient* client = _documentClients[document.identifier];
+	if(!client)
+		return;
+
+	// Collect documents before shutdown cleans up state
+	NSMutableArray<OakDocument*>* affectedDocs = [NSMutableArray new];
+	for(NSUUID* docId in _documentClients)
+	{
+		if(_documentClients[docId] == client)
+		{
+			OakDocument* doc = [OakDocument documentWithIdentifier:docId];
+			if(doc && doc.isLoaded)
+				[affectedDocs addObject:doc];
+		}
+	}
+
+	[client shutdown];
+
+	// Defer re-open so lspClientDidTerminate: cleanup completes first
+	dispatch_async(dispatch_get_main_queue(), ^{
+		for(OakDocument* doc in affectedDocs)
+			[self documentDidOpen:doc];
+
+		[NSNotificationCenter.defaultCenter postNotificationName:LSPServerStatusDidChangeNotification object:self];
+	});
+}
+
 - (NSArray<NSDictionary*>*)diagnosticsForDocument:(OakDocument*)document atLine:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter
 {
 	NSString* path = document.path;
@@ -750,6 +845,8 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 		[_documentVersions removeObjectForKey:docId];
 		[_openDocuments removeObject:docId];
 	}
+
+	[NSNotificationCenter.defaultCenter postNotificationName:LSPServerStatusDidChangeNotification object:self];
 }
 
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri
@@ -790,5 +887,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 		text::pos_t pos(line.unsignedIntegerValue, 0);
 		[doc setMarkOfType:markType atPosition:pos content:message];
 	}
+
+	[NSNotificationCenter.defaultCenter postNotificationName:LSPDiagnosticsDidChangeNotification object:self userInfo:@{ @"uri": uri }];
 }
 @end

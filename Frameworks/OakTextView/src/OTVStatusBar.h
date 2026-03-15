@@ -1,10 +1,13 @@
 @protocol OTVStatusBarDelegate <NSObject>
 - (void)showBundleItemSelector:(NSPopUpButton*)popUpButton;
 - (void)showSymbolSelector:(NSPopUpButton*)popUpButton;
+@optional
+- (void)showLSPStatusMenu:(NSPopUpButton*)popUpButton;
 @end
 
 @interface OTVStatusBar : NSVisualEffectView
 - (void)showBundlesMenu:(id)sender;
+- (void)setLspStatus:(NSString*)status errors:(NSUInteger)errors warnings:(NSUInteger)warnings info:(NSUInteger)info;
 @property (nonatomic) NSString* selectionString;
 @property (nonatomic) NSString* grammarName;
 @property (nonatomic) NSString* symbolName;

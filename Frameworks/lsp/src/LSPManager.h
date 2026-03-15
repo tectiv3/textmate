@@ -3,6 +3,9 @@
 
 #import <document/OakDocument.h>
 
+extern NSString* const LSPDiagnosticsDidChangeNotification;
+extern NSString* const LSPServerStatusDidChangeNotification;
+
 @interface LSPManager : NSObject
 + (instancetype)sharedManager;
 - (void)documentDidOpen:(OakDocument*)document;
@@ -32,6 +35,10 @@
 - (void)resolveCodeAction:(NSDictionary*)codeAction forDocument:(OakDocument*)document completion:(void(^)(NSDictionary*))callback;
 - (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments forDocument:(OakDocument*)document completion:(void(^)(id))callback;
 - (BOOL)hasClientForDocument:(OakDocument*)document;
+- (NSDictionary<NSString*, NSNumber*>*)diagnosticCountsForDocument:(OakDocument*)document;
+- (NSString*)serverStatusForDocument:(OakDocument*)document;
+- (NSString*)serverNameForDocument:(OakDocument*)document;
+- (void)restartServerForDocument:(OakDocument*)document;
 @end
 
 #endif /* LSP_MANAGER_H_POC */

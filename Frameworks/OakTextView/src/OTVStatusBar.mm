@@ -57,6 +57,8 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 @property (nonatomic) NSPopUpButton* tabSizePopUp;
 @property (nonatomic) NSPopUpButton* bundleItemsPopUp;
 @property (nonatomic) NSPopUpButton* symbolPopUp;
+@property (nonatomic) NSPopUpButton* lspPopUp;
+@property (nonatomic) NSView*        lspDivider;
 @property (nonatomic) NSButton*      macroRecordingButton;
 @end
 
@@ -86,6 +88,10 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		self.macroRecordingButton.action  = @selector(toggleMacroRecording:);
 		self.macroRecordingButton.toolTip = @"Click to start recording a macro";
 
+		self.lspPopUp = OakCreateStatusBarPopUpButton(nil, @"LSP Status");
+		[[self.lspPopUp cell] setUsesItemFromMenu:NO];
+		self.lspPopUp.hidden = YES;
+
 		NSFontDescriptor* descriptor = [self.selectionField.font.fontDescriptor fontDescriptorByAddingAttributes:@{
 			NSFontFeatureSettingsAttribute: @[ @{ NSFontFeatureTypeIdentifierKey: @(kNumberSpacingType), NSFontFeatureSelectorIdentifierKey: @(kMonospacedNumbersSelector) } ]
 		}];
@@ -114,6 +120,9 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		NSView* dividerThree = OakCreateNSBoxSeparator();
 		NSView* dividerFour  = OakCreateNSBoxSeparator();
 		NSView* dividerFive  = OakCreateNSBoxSeparator();
+		NSView* dividerSix   = OakCreateNSBoxSeparator();
+		self.lspDivider = dividerSix;
+		self.lspDivider.hidden = YES;
 
 		NSDictionary* views = @{
 			@"topDivider":   topDivider,
@@ -128,11 +137,13 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 			@"dividerFour":  dividerFour,
 			@"symbol":       self.symbolPopUp,
 			@"dividerFive":  dividerFive,
+			@"dividerSix":   dividerSix,
+			@"lsp":          self.lspPopUp,
 			@"recording":    self.macroRecordingButton,
 		};
 
 		OakAddAutoLayoutViewsToSuperview([views allValues], self);
-		OakSetupKeyViewLoop(@[ self, _grammarPopUp, _tabSizePopUp, _bundleItemsPopUp, _symbolPopUp, _macroRecordingButton ]);
+		OakSetupKeyViewLoop(@[ self, _grammarPopUp, _tabSizePopUp, _bundleItemsPopUp, _symbolPopUp, _lspPopUp, _macroRecordingButton ]);
 
 		[self.selectionField setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
 		[self.selectionField setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow+2 forOrientation:NSLayoutConstraintOrientationHorizontal];
@@ -143,20 +154,21 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		[self.symbolPopUp setContentHuggingPriority:NSLayoutPriorityDefaultLow-1 forOrientation:NSLayoutConstraintOrientationHorizontal];
 		[self.symbolPopUp setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow-1 forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-10-[line]-[selection(>=50,<=225)]-8-[dividerOne(==1)]-2-[grammar(>=125@400,>=50,<=225)]-5-[dividerTwo(==1)]-2-[tabSize]-4-[dividerThree(==1)]-5-[items(==31)]-4-[dividerFour(==1)]-2-[symbol(>=125@450,>=50)]-5-[dividerFive(==1)]-6-[recording]-7-|" options:0 metrics:nil views:views]];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-10-[line]-[selection(>=50,<=225)]-8-[dividerOne(==1)]-2-[grammar(>=125@400,>=50,<=225)]-5-[dividerTwo(==1)]-2-[tabSize]-4-[dividerThree(==1)]-5-[items(==31)]-4-[dividerFour(==1)]-2-[symbol(>=125@450,>=50)]-5-[dividerSix(==1)]-2-[lsp]-5-[dividerFive(==1)]-6-[recording]-7-|" options:0 metrics:nil views:views]];
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[topDivider]|" options:0 metrics:nil views:views]];
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[topDivider(==1)]" options:0 metrics:nil views:views]];
 
 		// Baseline align text-controls
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[line]-[selection]-(>=1)-[grammar]-(>=1)-[tabSize]-(>=1)-[symbol]" options:NSLayoutFormatAlignAllBaseline metrics:nil views:views]];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[line]-[selection]-(>=1)-[grammar]-(>=1)-[tabSize]-(>=1)-[symbol]-(>=1)-[lsp]" options:NSLayoutFormatAlignAllBaseline metrics:nil views:views]];
 
 		// Center non-text control
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[selection]-(>=1)-[dividerOne]-(>=1)-[dividerTwo]-(>=1)-[dividerThree]-(>=1)-[items]-(>=1)-[dividerFour]-(>=1)-[dividerFive]-(>=1)-[recording]" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-5-[dividerOne(==15,==dividerTwo,==dividerThree,==dividerFour,==dividerFive)]-5-|" options:0 metrics:nil views:views]];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[selection]-(>=1)-[dividerOne]-(>=1)-[dividerTwo]-(>=1)-[dividerThree]-(>=1)-[items]-(>=1)-[dividerFour]-(>=1)-[dividerSix]-(>=1)-[dividerFive]-(>=1)-[recording]" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-5-[dividerOne(==15,==dividerTwo,==dividerThree,==dividerFour,==dividerFive,==dividerSix)]-5-|" options:0 metrics:nil views:views]];
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(grammarPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.grammarPopUp];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(bundleItemsPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.bundleItemsPopUp];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(symbolPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.symbolPopUp];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.lspPopUp];
 	}
 	return self;
 }
@@ -328,6 +340,71 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 {
 	_softTabs = flag;
 	[self updateTabSettings];
+}
+
+// ========
+// = LSP  =
+// ========
+
+- (void)lspPopUpButtonWillPopUp:(NSNotification*)aNotification
+{
+	if([self.delegate respondsToSelector:@selector(showLSPStatusMenu:)])
+		[self.delegate showLSPStatusMenu:self.lspPopUp];
+}
+
+- (void)setLspStatus:(NSString*)status errors:(NSUInteger)errors warnings:(NSUInteger)warnings info:(NSUInteger)info
+{
+	BOOL visible = status != nil;
+	self.lspPopUp.hidden = !visible;
+	self.lspDivider.hidden = !visible;
+
+	if(!visible)
+		return;
+
+	NSFont* font = OakStatusBarFont();
+	NSMutableAttributedString* attrTitle = [NSMutableAttributedString new];
+
+	if([status isEqualToString:@"starting"])
+	{
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:@"◉ " attributes:@{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: [NSColor systemYellowColor],
+		}]];
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:@"LSP" attributes:@{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: NSColor.secondaryLabelColor,
+		}]];
+	}
+	else
+	{
+		// Semaphore: always show all three categories with colored dots
+		NSDictionary* countAttrs = @{ NSFontAttributeName: font, NSForegroundColorAttributeName: NSColor.secondaryLabelColor };
+
+		// Errors — red dot
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:@"● " attributes:@{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: errors > 0 ? [NSColor systemRedColor] : NSColor.tertiaryLabelColor,
+		}]];
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", (unsigned long)errors] attributes:countAttrs]];
+
+		// Warnings — yellow dot
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:@"  ● " attributes:@{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: warnings > 0 ? [NSColor systemYellowColor] : NSColor.tertiaryLabelColor,
+		}]];
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", (unsigned long)warnings] attributes:countAttrs]];
+
+		// Info — blue dot
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:@"  ● " attributes:@{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: info > 0 ? [NSColor systemCyanColor] : NSColor.tertiaryLabelColor,
+		}]];
+		[attrTitle appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", (unsigned long)info] attributes:countAttrs]];
+	}
+
+	NSMenuItem* displayItem = [[NSMenuItem alloc] initWithTitle:@"" action:NULL keyEquivalent:@""];
+	displayItem.attributedTitle = attrTitle;
+	[[self.lspPopUp cell] setMenuItem:displayItem];
 }
 
 - (void)dealloc
