@@ -11,7 +11,7 @@
 
 + (void)setup
 {
-	static LSPBridge* instance = nil;
+	static __unused LSPBridge* instance = nil;
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
 		instance = [[LSPBridge alloc] init];

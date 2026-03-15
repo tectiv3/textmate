@@ -505,6 +505,30 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	[client requestRangeFormattingForURI:uri startLine:startLine startCharacter:startCharacter endLine:endLine endCharacter:endCharacter tabSize:tabSize insertSpaces:insertSpaces completion:callback];
 }
 
+- (void)resolveCompletionItem:(NSDictionary*)item forDocument:(OakDocument*)document completion:(void(^)(NSDictionary*))callback
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	if(!client)
+	{
+		if(callback)
+			callback(nil);
+		return;
+	}
+
+	[client resolveCompletionItem:item completion:^(NSDictionary* resolved) {
+		if(callback)
+			callback(resolved);
+	}];
+}
+
+- (BOOL)serverSupportsCompletionResolveForDocument:(OakDocument*)document
+{
+	NSUUID* docId = document.identifier;
+	LSPClient* client = _documentClients[docId];
+	return client && client.completionResolveProvider;
+}
+
 - (BOOL)serverSupportsFormattingForDocument:(OakDocument*)document
 {
 	NSUUID* docId = document.identifier;

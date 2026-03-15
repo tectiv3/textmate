@@ -5182,6 +5182,7 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 	{
 		_lspCompletionPopup = [[OakCompletionPopup alloc] initWithTheme:_lspTheme];
 		_lspCompletionPopup.delegate = (id<OakCompletionPopupDelegate>)self;
+		_lspCompletionPopup.supportsResolve = [[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:self.document];
 	}
 
 	NSMutableArray<OakCompletionItem*>* items = [NSMutableArray arrayWithCapacity:suggestions.count];
@@ -5235,6 +5236,7 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		OakCompletionItem* item = [[OakCompletionItem alloc]
 			initWithLabel:label insertText:insert detail:detail kind:kind];
 		item.isSnippet = isSnippet;
+		item.originalItem = s[@"_originalItem"];
 		[items addObject:item];
 	}
 
@@ -5457,6 +5459,91 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 - (void)completionPopupDidDismiss:(OakCompletionPopup*)popup
 {
 	_lspFilterPrefix = nil;
+}
+
+- (void)completionPopup:(OakCompletionPopup*)popup resolveItem:(OakCompletionItem*)item
+{
+	if(!item.originalItem)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	if(![[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:doc])
+		return;
+
+	__weak OakTextView* weakSelf = self;
+	[[LSPManager sharedManager] resolveCompletionItem:item.originalItem forDocument:doc completion:^(NSDictionary* resolved) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !resolved)
+			return;
+
+		NSString* rawDocumentation = nil;
+		id docValue = resolved[@"documentation"];
+		if([docValue isKindOfClass:[NSString class]])
+		{
+			rawDocumentation = docValue;
+		}
+		else if([docValue isKindOfClass:[NSDictionary class]])
+		{
+			rawDocumentation = docValue[@"value"];
+		}
+
+		NSString* newInsertText = nil;
+		if(resolved[@"insertText"])
+			newInsertText = resolved[@"insertText"];
+		else if(resolved[@"textEdit"] && [resolved[@"textEdit"] isKindOfClass:[NSDictionary class]])
+			newInsertText = resolved[@"textEdit"][@"newText"];
+
+		dispatch_async(dispatch_get_main_queue(), ^{
+			NSAttributedString* parsedDocs = nil;
+			if(rawDocumentation.length > 0)
+			{
+				NSMutableAttributedString* combined = [[NSMutableAttributedString alloc] init];
+				NSString* text = rawDocumentation;
+
+				// Extract code blocks (```lang\n...\n```) as monospaced signature
+				static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
+				NSArray* codeMatches = [codeBlockRegex matchesInString:text options:0 range:NSMakeRange(0, text.length)];
+
+				NSString* bodyText = text;
+				if(codeMatches.count > 0)
+				{
+					NSTextCheckingResult* firstMatch = codeMatches[0];
+					NSString* signature = [text substringWithRange:[firstMatch rangeAtIndex:1]];
+					signature = [signature stringByReplacingOccurrencesOfString:@"<?php\n" withString:@""];
+					signature = [signature stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+					if(signature.length > 0)
+					{
+						NSDictionary* monoAttrs = @{
+							NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
+							NSForegroundColorAttributeName: [NSColor labelColor]
+						};
+						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:signature attributes:monoAttrs]];
+					}
+
+					NSMutableString* remaining = [text mutableCopy];
+					[remaining replaceCharactersInRange:[firstMatch rangeAtIndex:0] withString:@""];
+					bodyText = [remaining stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+					bodyText = [bodyText stringByReplacingOccurrencesOfString:@"---" withString:@""];
+					bodyText = [bodyText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+				}
+
+				if(bodyText.length > 0)
+				{
+					if(combined.length > 0)
+						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n\n" attributes:@{}]];
+					[combined appendAttributedString:[strongSelf parseMarkdownToAttributedString:bodyText]];
+				}
+
+				if(combined.length > 0)
+					parsedDocs = combined;
+			}
+			[strongSelf->_lspCompletionPopup resolveCompletedFor:item documentation:parsedDocs insertText:newInsertText];
+		});
+	}];
 }
 
 // ===================================
