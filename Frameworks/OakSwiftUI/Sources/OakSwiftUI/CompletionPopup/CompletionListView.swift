@@ -34,6 +34,7 @@ struct CompletionListView: View {
 					}
 				}
 				.padding(.vertical, 4)
+				.padding(.horizontal, 4)
 			}
 			.accessibilityElement(children: .contain)
 			.onChange(of: viewModel.selectedIndex) { _, newValue in
