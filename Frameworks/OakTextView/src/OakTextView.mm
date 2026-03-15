@@ -5483,7 +5483,48 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 		dispatch_async(dispatch_get_main_queue(), ^{
 			NSAttributedString* parsedDocs = nil;
 			if(rawDocumentation.length > 0)
-				parsedDocs = [strongSelf parseMarkdownToAttributedString:rawDocumentation];
+			{
+				NSMutableAttributedString* combined = [[NSMutableAttributedString alloc] init];
+				NSString* text = rawDocumentation;
+
+				// Extract code blocks (```lang\n...\n```) as monospaced signature
+				static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
+				NSArray* codeMatches = [codeBlockRegex matchesInString:text options:0 range:NSMakeRange(0, text.length)];
+
+				NSString* bodyText = text;
+				if(codeMatches.count > 0)
+				{
+					NSTextCheckingResult* firstMatch = codeMatches[0];
+					NSString* signature = [text substringWithRange:[firstMatch rangeAtIndex:1]];
+					signature = [signature stringByReplacingOccurrencesOfString:@"<?php\n" withString:@""];
+					signature = [signature stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+					if(signature.length > 0)
+					{
+						NSDictionary* monoAttrs = @{
+							NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
+							NSForegroundColorAttributeName: [NSColor labelColor]
+						};
+						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:signature attributes:monoAttrs]];
+					}
+
+					NSMutableString* remaining = [text mutableCopy];
+					[remaining replaceCharactersInRange:[firstMatch rangeAtIndex:0] withString:@""];
+					bodyText = [remaining stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+					bodyText = [bodyText stringByReplacingOccurrencesOfString:@"---" withString:@""];
+					bodyText = [bodyText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+				}
+
+				if(bodyText.length > 0)
+				{
+					if(combined.length > 0)
+						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n\n" attributes:@{}]];
+					[combined appendAttributedString:[strongSelf parseMarkdownToAttributedString:bodyText]];
+				}
+
+				if(combined.length > 0)
+					parsedDocs = combined;
+			}
 			[strongSelf->_lspCompletionPopup resolveCompletedFor:item documentation:parsedDocs insertText:newInsertText];
 		});
 	}];

@@ -10,8 +10,7 @@ struct DocDetailView: View {
 				.font(.system(size: max(theme.fontSize - 1, 10)))
 				.lineLimit(nil)
 				.frame(maxWidth: .infinity, alignment: .leading)
-				.padding(.horizontal, 12)
-				.padding(.vertical, 10)
+				.padding(10)
 		}
 		.frame(width: 260)
 	}
