@@ -13,7 +13,6 @@ struct DocDetailView: View {
 				.padding(10)
 		}
 		.frame(width: 260)
-		.background(.ultraThinMaterial)
 	}
 
 	private var attributedDocumentation: AttributedString {

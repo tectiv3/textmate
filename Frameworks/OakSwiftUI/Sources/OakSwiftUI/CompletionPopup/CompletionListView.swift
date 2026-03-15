@@ -2,18 +2,19 @@ import SwiftUI
 
 struct CompletionListView: View {
 	@ObservedObject var viewModel: CompletionViewModel
+	let showDocPanel: Bool
 	@EnvironmentObject var theme: OakThemeEnvironment
 
 	var body: some View {
 		HStack(spacing: 0) {
 			itemsList
-			if let docs = viewModel.resolvedDocumentation, !docs.isEmpty {
+			if showDocPanel {
 				Divider()
-				DocDetailView(documentation: docs)
-					.transition(.move(edge: .trailing).combined(with: .opacity))
+				docPanel
 			}
 		}
-		.animation(.easeInOut(duration: 0.15), value: viewModel.resolvedDocumentation != nil)
+		.background(.ultraThinMaterial)
+		.clipShape(RoundedRectangle(cornerRadius: 6))
 	}
 
 	private var itemsList: some View {
@@ -42,7 +43,18 @@ struct CompletionListView: View {
 				}
 			}
 		}
-		.background(.ultraThinMaterial)
-		.clipShape(RoundedRectangle(cornerRadius: 6))
+	}
+
+	private var docPanel: some View {
+		Group {
+			if let docs = viewModel.resolvedDocumentation, !docs.isEmpty {
+				DocDetailView(documentation: docs)
+					.transition(.opacity)
+			} else {
+				Color.clear
+					.frame(width: 260)
+			}
+		}
+		.animation(.easeIn(duration: 0.1), value: viewModel.resolvedDocumentation != nil)
 	}
 }

@@ -5166,6 +5166,7 @@ static std::string applyTextEdits (ng::buffer_api_t const& buffer, NSArray<NSDic
 	{
 		_lspCompletionPopup = [[OakCompletionPopup alloc] initWithTheme:_lspTheme];
 		_lspCompletionPopup.delegate = (id<OakCompletionPopupDelegate>)self;
+		_lspCompletionPopup.supportsResolve = [[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:self.document];
 	}
 
 	NSMutableArray<OakCompletionItem*>* items = [NSMutableArray arrayWithCapacity:suggestions.count];

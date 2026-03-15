@@ -4,11 +4,11 @@ import Combine
 
 @MainActor @objc public class OakCompletionPopup: NSObject {
 	@objc public weak var delegate: OakCompletionPopupDelegate?
+	@objc public var supportsResolve: Bool = false
 
 	private var window: NSWindow?
 	private var viewModel: CompletionViewModel?
 	private let theme: OakThemeEnvironment
-	private var baseWidth: CGFloat = 280
 	private static let docPanelWidth: CGFloat = 262
 	private var cancellables = Set<AnyCancellable>()
 
@@ -34,14 +34,7 @@ import Combine
 		}
 		self.viewModel = vm
 
-		vm.$resolvedDocumentation
-			.receive(on: RunLoop.main)
-			.sink { [weak self] docs in
-				self?.resizePanelForDocs(docs != nil && !(docs?.isEmpty ?? true))
-			}
-			.store(in: &cancellables)
-
-		let listView = CompletionListView(viewModel: vm)
+		let listView = CompletionListView(viewModel: vm, showDocPanel: supportsResolve)
 			.environmentObject(theme)
 
 		let hostingView = NSHostingView(rootView: listView)
@@ -52,8 +45,10 @@ import Combine
 		let detailFont = NSFont.systemFont(ofSize: max(theme.fontSize - 2, 9))
 		let maxLabelWidth = items.prefix(50).map { ($0.label as NSString).size(withAttributes: [.font: theme.font]).width }.max() ?? 200
 		let maxDetailWidth = items.prefix(50).map { ($0.detail as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0
-		let width = min(max(maxLabelWidth + maxDetailWidth + 60, 280), 650)
-		self.baseWidth = width
+		var width = min(max(maxLabelWidth + maxDetailWidth + 60, 280), 650)
+		if supportsResolve {
+			width += Self.docPanelWidth
+		}
 
 		let screenPoint = parentView.window?.convertPoint(toScreen:
 			parentView.convert(point, to: nil)) ?? point
@@ -92,14 +87,6 @@ import Combine
 			item.updateInsertText(newInsert)
 		}
 		viewModel?.resolveCompleted(for: item, documentation: documentation)
-	}
-
-	private func resizePanelForDocs(_ hasDocs: Bool) {
-		guard let w = window else { return }
-		var frame = w.frame
-		let targetWidth = hasDocs ? baseWidth + Self.docPanelWidth : baseWidth
-		frame.size.width = targetWidth
-		w.setFrame(frame, display: true, animate: true)
 	}
 
 	private func resizePanelToFit() {
