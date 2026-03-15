@@ -1,6 +1,6 @@
 import AppKit
 
-@objc public class OakCompletionItem: NSObject, Identifiable {
+@objc public class OakCompletionItem: NSObject, Identifiable, @unchecked Sendable {
 	public let id = UUID()
 	@objc public let label: String
 	@objc public private(set) var insertText: String?

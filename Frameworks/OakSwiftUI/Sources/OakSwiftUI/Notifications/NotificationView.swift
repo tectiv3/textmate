@@ -16,6 +16,7 @@ struct NotificationView: View {
 						.foregroundStyle(.white)
 						.lineLimit(2)
 				}
+				.id(toast.id)
 				.padding(.horizontal, 20)
 				.padding(.vertical, 14)
 				.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))

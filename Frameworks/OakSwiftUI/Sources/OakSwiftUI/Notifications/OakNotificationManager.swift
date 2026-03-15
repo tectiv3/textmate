@@ -29,6 +29,9 @@ import Combine
 		}
 		self.ensureWindow()
 		self.model.show(message: trimmed, type: toastType)
+		// Force the panel to redraw — borderless NSHostingView can go stale after idle
+		self.windowController?.window?.orderFrontRegardless()
+		self.windowController?.window?.displayIfNeeded()
 	}
 
 	private func ensureWindow() {
