@@ -320,6 +320,10 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	if((([self.window styleMask] & NSWindowStyleMaskFullScreen) != NSWindowStyleMaskFullScreen) && !self.window.isZoomed)
 		[NSUserDefaults.standardUserDefaults setObject:NSStringFromRect([self windowFrame]) forKey:@"DocumentControllerWindowFrame"];
 
+	// Resign first responder before teardown to let TextInputUI disconnect cleanly
+	if([self.window.firstResponder isKindOfClass:[NSView class]])
+		[self.window makeFirstResponder:nil];
+
 	[_arrayController unbind:NSContentBinding];
 
 	self.documents           = nil;
