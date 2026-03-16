@@ -126,23 +126,66 @@ lspInitOptions = '{ "plugins": [{ "name": "@vue/typescript-plugin", "location": 
 | `lspRootPath` | Override workspace root detection |
 | `lspInitOptions` | JSON object passed as `initializationOptions` to the server |
 | `lspFormatOnSave` | Set to `true` to format via LSP before saving (default: `false`) |
+| `formatCommand` | Shell command for an external formatter (stdin/stdout, overrides LSP formatting) |
+| `formatOnSave` | Set to `true` to format before saving — uses `formatCommand` if set, else LSP (default: `false`) |
 
 Press **Opt+Tab** to trigger LSP completions. Diagnostics (errors, warnings) appear automatically in the gutter.
 
 ### Formatting
 
-Format the current document via **Text → Format Code** (or **Format Selection** with an active selection). Enable format-on-save per file type:
+Format the current document via **Text → Format Code**. Enable format-on-save per file type.
+
+#### Custom Formatter
+
+You can use any external formatter that reads stdin and writes formatted output to stdout. When `formatCommand` is set, it takes priority over LSP formatting for that file type. Standard TextMate variables (`TM_FILEPATH`, `TM_TAB_SIZE`, `TM_SOFT_TABS`, etc.) are available to the command. The working directory is set to the project root so tools find their config files.
+
+**Note:** Quote the command if it contains arguments.
+
+```
+# .tm_properties
+
+# JavaScript/TypeScript with Prettier
+[ *.{js,jsx,ts,tsx} ]
+formatCommand = "prettier --parser=typescript"
+formatOnSave  = true
+
+# PHP with Prettier
+[ *.php ]
+formatCommand = "prettier --parser=php"
+formatOnSave  = true
+
+# Python with Black
+[ *.py ]
+formatCommand = "black -q -"
+formatOnSave  = true
+
+# Rust with rustfmt
+[ *.rs ]
+formatCommand = rustfmt
+formatOnSave  = true
+
+# Go with gofmt
+[ *.go ]
+formatCommand = gofmt
+formatOnSave  = true
+
+# C/C++/ObjC with clang-format
+[ *.{c,cc,cpp,h,hpp,m,mm} ]
+formatCommand = clang-format
+formatOnSave  = true
+```
+
+#### LSP Formatting
+
+For file types without a `formatCommand`, formatting falls back to the language server (if it supports `textDocument/formatting`):
 
 ```
 # .tm_properties
 [ *.php ]
-lspFormatOnSave = true
-
-[ *.{ts,tsx,js,jsx,vue} ]
-lspFormatOnSave = true
+formatOnSave = true
 ```
 
-The formatter requires the language server to support `textDocument/formatting`. Cursor position is preserved.
+The legacy `lspFormatOnSave` key still works for backward compatibility.
 
 # Legal
 
