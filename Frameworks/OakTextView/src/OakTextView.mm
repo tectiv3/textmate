@@ -3375,6 +3375,11 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		bool enabled = settings.get("lspCodeActions", true);
 		return enabled && [[LSPManager sharedManager] serverSupportsCodeActionsForDocument:doc];
 	}
+	else if([aMenuItem action] == @selector(lspGoToDefinition:) || [aMenuItem action] == @selector(lspShowHoverInfo:) || [aMenuItem action] == @selector(lspFindReferences:) || [aMenuItem action] == @selector(lspComplete:))
+	{
+		OakDocument* doc = self.document;
+		return doc && [[LSPManager sharedManager] hasClientForDocument:doc];
+	}
 	return YES;
 }
 
