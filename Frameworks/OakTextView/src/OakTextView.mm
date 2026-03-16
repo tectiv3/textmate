@@ -23,6 +23,7 @@
 #import <buffer/indexed_map.h>
 #import <BundleMenu/BundleMenu.h>
 #import <BundlesManager/BundlesManager.h>
+#import <Preferences/FormatterRegistry.h>
 #import <Preferences/Keys.h>
 #import <bundles/bundles.h>
 #import <cf/cf.h>
@@ -1094,6 +1095,13 @@ static std::string shell_quote (std::vector<std::string> paths)
 			settings_t const settings = settings_for_path(filePath, fileType, directory);
 			bool formatOnSave = settings.get(kSettingsFormatOnSaveKey, settings.get("lspFormatOnSave", false));
 			std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
+
+			if(formatCommand.empty())
+			{
+				NSString* autoCommand = [[FormatterRegistry sharedInstance] formatCommandForPath:doc.path];
+				if(autoCommand)
+					formatCommand = to_s(autoCommand);
+			}
 
 			if(formatOnSave && !formatCommand.empty())
 			{
@@ -3349,11 +3357,12 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
 
 		BOOL hasCustomFormatter = !formatCommand.empty();
+		BOOL hasAutoFormatter   = !hasCustomFormatter && [[FormatterRegistry sharedInstance] formatCommandForPath:doc.path] != nil;
 		BOOL hasRange = doc && [[LSPManager sharedManager] serverSupportsRangeFormattingForDocument:doc];
 		BOOL hasDoc   = doc && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc];
-		BOOL showSelection = !hasCustomFormatter && [self hasSelection] && hasRange;
+		BOOL showSelection = !hasCustomFormatter && !hasAutoFormatter && [self hasSelection] && hasRange;
 		[aMenuItem updateTitle:[NSString stringWithCxxString:format_string::replace(to_s(aMenuItem.title), "\\b(\\w+) / (Selection)\\b", showSelection ? "$2" : "$1")]];
-		return hasCustomFormatter || showSelection || hasDoc;
+		return hasCustomFormatter || hasAutoFormatter || showSelection || hasDoc;
 	}
 	else if([aMenuItem action] == @selector(lspRename:))
 	{
@@ -5876,6 +5885,13 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 
 	settings_t const settings = settings_for_path(filePath, fileType, directory);
 	std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
+
+	if(formatCommand.empty())
+	{
+		NSString* autoCommand = [[FormatterRegistry sharedInstance] formatCommandForPath:doc.path];
+		if(autoCommand)
+			formatCommand = to_s(autoCommand);
+	}
 
 	if(!formatCommand.empty())
 	{

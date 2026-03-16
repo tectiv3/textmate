@@ -70,6 +70,12 @@ extern NSString* const kUserDefaultsLicenseOwnerKey;
 extern NSString* const kUserDefaultsDisableAntiAliasKey;
 extern NSString* const kUserDefaultsLineNumbersKey;
 
+// ==============
+// = Formatters =
+// ==============
+
+extern NSString* const kUserDefaultsFormatterConfigurationsKey;
+
 // =========
 // = Other =
 // =========

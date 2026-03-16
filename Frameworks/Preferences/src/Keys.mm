@@ -110,6 +110,12 @@ NSString* const kUserDefaultsLicenseOwnerKey            = @"licenseOwnerName";
 NSString* const kUserDefaultsDisableAntiAliasKey        = @"disableAntiAlias";
 NSString* const kUserDefaultsLineNumbersKey             = @"lineNumbers";
 
+// ==============
+// = Formatters =
+// ==============
+
+NSString* const kUserDefaultsFormatterConfigurationsKey = @"formatters";
+
 // =========
 // = Other =
 // =========
