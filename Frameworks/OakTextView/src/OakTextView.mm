@@ -5744,6 +5744,13 @@ static NSString* runCustomFormatter (std::string const& command, NSString* input
 
 	task.environment = env;
 
+	// Set working directory so tools find config files relative to the project/file
+	auto it = variables.find("TM_PROJECT_DIRECTORY");
+	if(it == variables.end())
+		it = variables.find("TM_DIRECTORY");
+	if(it != variables.end())
+		task.currentDirectoryURL = [NSURL fileURLWithPath:[NSString stringWithCxxString:it->second]];
+
 	NSPipe* stdinPipe  = [NSPipe pipe];
 	NSPipe* stdoutPipe = [NSPipe pipe];
 	NSPipe* stderrPipe = [NSPipe pipe];
