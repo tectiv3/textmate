@@ -521,6 +521,10 @@ private:
 	NSUInteger _lspInitialPrefixLength;
 	NSString* _lspFilterPrefix;
 
+	// = Custom Formatter =
+
+	NSString* _lastFormatterError;
+
 	// = LSP Hover =
 
 	OakInfoTooltip* _lspHoverTooltip;
@@ -1088,9 +1092,41 @@ static std::string shell_quote (std::vector<std::string> paths)
 			std::string directory = to_s(doc.directory ?: [doc.path stringByDeletingLastPathComponent] ?: @"");
 
 			settings_t const settings = settings_for_path(filePath, fileType, directory);
-			bool lspFormatOnSave = settings.get("lspFormatOnSave", false);
+			bool formatOnSave = settings.get(kSettingsFormatOnSaveKey, settings.get("lspFormatOnSave", false));
+			std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
 
-			if(lspFormatOnSave && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc])
+			if(formatOnSave && !formatCommand.empty())
+			{
+				NSString* inputText = [NSString stringWithCxxString:documentView->substr()];
+				std::map<std::string, std::string> variables = [self variables];
+
+				NSString* error = nil;
+				NSString* output = runCustomFormatter(formatCommand, inputText, variables, &error);
+
+				if(output && ![output isEqualToString:inputText])
+				{
+					size_t caretOffset = documentView->ranges().last().last.index;
+					size_t newLength = to_s(output).size();
+
+					AUTO_REFRESH;
+					std::multimap<std::pair<size_t, size_t>, std::string> replacements;
+					replacements.emplace(std::make_pair((size_t)0, documentView->size()), to_s(output));
+					documentView->perform_replacements(replacements);
+					documentView->set_ranges(ng::range_t(std::min(caretOffset, newLength)));
+					_lastFormatterError = nil;
+				}
+				else if(error)
+				{
+					// Show tooltip on first failure, suppress repeats until command changes or succeeds
+					if(![error isEqualToString:_lastFormatterError])
+					{
+						_lastFormatterError = error;
+						[self showToolTip:[NSString stringWithFormat:@"Formatter: %@", error]];
+					}
+					NSLog(@"[Formatter] Format-on-save failed: %@", error);
+				}
+			}
+			else if(formatOnSave && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc])
 			{
 				[[LSPManager sharedManager] flushPendingChangesForDocument:doc];
 
@@ -3305,11 +3341,19 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	else if([aMenuItem action] == @selector(lspFormatDocument:))
 	{
 		OakDocument* doc = self.document;
+		std::string filePath  = to_s(doc.path ?: @"");
+		std::string fileType  = to_s(doc.fileType ?: @"");
+		std::string directory = to_s(doc.directory ?: [doc.path stringByDeletingLastPathComponent] ?: @"");
+
+		settings_t const settings = settings_for_path(filePath, fileType, directory);
+		std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
+
+		BOOL hasCustomFormatter = !formatCommand.empty();
 		BOOL hasRange = doc && [[LSPManager sharedManager] serverSupportsRangeFormattingForDocument:doc];
 		BOOL hasDoc   = doc && [[LSPManager sharedManager] serverSupportsFormattingForDocument:doc];
-		BOOL showSelection = [self hasSelection] && hasRange;
+		BOOL showSelection = !hasCustomFormatter && [self hasSelection] && hasRange;
 		[aMenuItem updateTitle:[NSString stringWithCxxString:format_string::replace(to_s(aMenuItem.title), "\\b(\\w+) / (Selection)\\b", showSelection ? "$2" : "$1")]];
-		return showSelection ? YES : hasDoc;
+		return hasCustomFormatter || showSelection || hasDoc;
 	}
 	else if([aMenuItem action] == @selector(lspRename:))
 	{
@@ -5677,6 +5721,108 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	}
 }
 
+// ========================
+// = Custom Formatter     =
+// ========================
+
+static NSString* runCustomFormatter (std::string const& command, NSString* inputText, std::map<std::string, std::string> const& variables, NSString** outError)
+{
+	NSTask* task = [[NSTask alloc] init];
+	task.launchPath = @"/bin/sh";
+	task.arguments = @[@"-c", [NSString stringWithCxxString:command]];
+
+	// Build environment from TM variables
+	NSMutableDictionary* env = [NSMutableDictionary dictionaryWithDictionary:[[NSProcessInfo processInfo] environment]];
+
+	// Prepend common tool paths for GUI launch contexts
+	NSString* existingPath = env[@"PATH"] ?: @"/usr/bin:/bin";
+	NSString* localBin = [NSHomeDirectory() stringByAppendingPathComponent:@".local/bin"];
+	env[@"PATH"] = [NSString stringWithFormat:@"/opt/homebrew/bin:/usr/local/bin:%@:%@", localBin, existingPath];
+
+	for(auto const& [key, value] : variables)
+		env[[NSString stringWithCxxString:key]] = [NSString stringWithCxxString:value];
+
+	task.environment = env;
+
+	NSPipe* stdinPipe  = [NSPipe pipe];
+	NSPipe* stdoutPipe = [NSPipe pipe];
+	NSPipe* stderrPipe = [NSPipe pipe];
+
+	task.standardInput  = stdinPipe;
+	task.standardOutput = stdoutPipe;
+	task.standardError  = stderrPipe;
+
+	@try {
+		[task launch];
+	}
+	@catch(NSException* e) {
+		if(outError)
+			*outError = [NSString stringWithFormat:@"Failed to launch formatter: %@", e.reason];
+		return nil;
+	}
+
+	// Write stdin and drain stdout/stderr concurrently to avoid pipe buffer deadlock
+	__block NSData* outputData = nil;
+	__block NSData* errorData = nil;
+
+	dispatch_group_t group = dispatch_group_create();
+	dispatch_queue_t bgQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+
+	dispatch_group_async(group, bgQueue, ^{
+		NSData* inputData = [inputText dataUsingEncoding:NSUTF8StringEncoding];
+		[stdinPipe.fileHandleForWriting writeData:inputData];
+		[stdinPipe.fileHandleForWriting closeFile];
+	});
+
+	dispatch_group_async(group, bgQueue, ^{
+		outputData = [stdoutPipe.fileHandleForReading readDataToEndOfFile];
+	});
+
+	dispatch_group_async(group, bgQueue, ^{
+		errorData = [stderrPipe.fileHandleForReading readDataToEndOfFile];
+	});
+
+	// Block with 3-second timeout
+	NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:3.0];
+	while(task.isRunning && [deadline timeIntervalSinceNow] > 0)
+		CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+
+	if(task.isRunning)
+	{
+		[task terminate];
+		[task waitUntilExit];
+		dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC));
+		if(outError)
+			*outError = @"Formatter timed out";
+		return nil;
+	}
+
+	// Process exited normally — pipe reads will complete promptly
+	dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+
+	if(task.terminationStatus != 0)
+	{
+		if(outError)
+		{
+			NSString* errStr = [[NSString alloc] initWithData:errorData encoding:NSUTF8StringEncoding];
+			*outError = [errStr componentsSeparatedByString:@"\n"].firstObject ?: @"Formatter failed";
+		}
+		return nil;
+	}
+
+	NSString* output = [[NSString alloc] initWithData:outputData encoding:NSUTF8StringEncoding];
+
+	// Guard against empty output from broken formatters
+	if(!output || output.length == 0)
+	{
+		if(outError)
+			*outError = @"Formatter returned empty output";
+		return nil;
+	}
+
+	return output;
+}
+
 // = LSP Formatting =
 // ==================
 
@@ -5712,6 +5858,40 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 	if(!doc)
 		return;
 
+	std::string filePath  = to_s(doc.path ?: @"");
+	std::string fileType  = to_s(doc.fileType ?: @"");
+	std::string directory = to_s(doc.directory ?: [doc.path stringByDeletingLastPathComponent] ?: @"");
+
+	settings_t const settings = settings_for_path(filePath, fileType, directory);
+	std::string formatCommand = settings.get(kSettingsFormatCommandKey, "");
+
+	if(!formatCommand.empty())
+	{
+		NSString* inputText = [NSString stringWithCxxString:documentView->substr()];
+		std::map<std::string, std::string> variables = [self variables];
+
+		NSString* error = nil;
+		NSString* output = runCustomFormatter(formatCommand, inputText, variables, &error);
+
+		if(output && ![output isEqualToString:inputText])
+		{
+			size_t caretOffset = documentView->ranges().last().last.index;
+			size_t newLength = to_s(output).size();
+
+			AUTO_REFRESH;
+			std::multimap<std::pair<size_t, size_t>, std::string> replacements;
+			replacements.emplace(std::make_pair((size_t)0, documentView->size()), to_s(output));
+			documentView->perform_replacements(replacements);
+			documentView->set_ranges(ng::range_t(std::min(caretOffset, newLength)));
+		}
+		else if(error)
+		{
+			[self showToolTip:error];
+		}
+		return;
+	}
+
+	// Fall back to LSP formatting
 	LSPManager* lsp = [LSPManager sharedManager];
 
 	bool hasSelection = documentView->has_selection();
