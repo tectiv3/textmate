@@ -105,6 +105,9 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		self.observedKeys = @[ @"selectionString", @"symbol", @"recordingMacro", @"themeUUID" ];
 		for(NSString* keyPath in self.observedKeys)
 			[_textView addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionInitial context:NULL];
+
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspDiagnosticsDidChange:) name:LSPDiagnosticsDidChangeNotification object:nil];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspServerStatusDidChange:) name:LSPServerStatusDidChangeNotification object:nil];
 	}
 	return self;
 }
@@ -338,6 +341,10 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 	if(oldDocument)
 		[oldDocument close];
+
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[self updateLSPStatusBar];
+	});
 }
 
 - (void)updateStyle
@@ -906,6 +913,126 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)documentWillClose:(NSNotification*)notification
 {
 	[LSPManager.sharedManager documentWillClose:notification.object];
+}
+
+// =======================
+// = LSP Status Bar      =
+// =======================
+
+- (void)updateLSPStatusBar
+{
+	if(!_statusBar)
+		return;
+
+	LSPManager* lsp = [LSPManager sharedManager];
+	OakDocument* doc = self.document;
+
+	NSString* status = [lsp serverStatusForDocument:doc];
+	NSDictionary<NSString*, NSNumber*>* counts = [lsp diagnosticCountsForDocument:doc];
+
+	[_statusBar setLspStatus:status
+	                  errors:[counts[@"errors"] unsignedIntegerValue]
+	                warnings:[counts[@"warnings"] unsignedIntegerValue]
+	                    info:[counts[@"info"] unsignedIntegerValue]];
+}
+
+- (void)lspDiagnosticsDidChange:(NSNotification*)notification
+{
+	if(!_statusBar || !self.document)
+		return;
+
+	NSString* uri = notification.userInfo[@"uri"];
+	if(uri)
+	{
+		NSURL* fileURL = self.document.path ? [NSURL fileURLWithPath:self.document.path] : nil;
+		if(fileURL && ![uri isEqualToString:fileURL.absoluteString])
+			return;
+	}
+
+	[self updateLSPStatusBar];
+}
+
+- (void)lspServerStatusDidChange:(NSNotification*)notification
+{
+	[self updateLSPStatusBar];
+}
+
+- (void)showLSPStatusMenu:(NSPopUpButton*)popUpButton
+{
+	LSPManager* lsp = [LSPManager sharedManager];
+	OakDocument* doc = self.document;
+	NSMenu* menu = popUpButton.menu;
+	[menu removeAllItems];
+
+	NSString* serverName = [lsp serverNameForDocument:doc];
+	NSString* status = [lsp serverStatusForDocument:doc];
+
+	NSString* headerText;
+	if(serverName && status)
+		headerText = [NSString stringWithFormat:@"%@ — %@", serverName, status];
+	else
+		headerText = @"No LSP Server";
+
+	NSMenuItem* header = [[NSMenuItem alloc] initWithTitle:headerText action:nil keyEquivalent:@""];
+	header.enabled = NO;
+	[menu addItem:header];
+
+	if(status)
+	{
+		[menu addItem:[NSMenuItem separatorItem]];
+		NSMenuItem* restart = [[NSMenuItem alloc] initWithTitle:@"Restart Server" action:@selector(lspRestartServer:) keyEquivalent:@""];
+		restart.target = self;
+		[menu addItem:restart];
+	}
+
+	NSDictionary* counts = [lsp diagnosticCountsForDocument:doc];
+	NSUInteger errors   = [counts[@"errors"] unsignedIntegerValue];
+	NSUInteger warnings = [counts[@"warnings"] unsignedIntegerValue];
+	NSUInteger info     = [counts[@"info"] unsignedIntegerValue];
+
+	if(errors + warnings + info > 0)
+	{
+		[menu addItem:[NSMenuItem separatorItem]];
+
+		NSMenuItem* next = [[NSMenuItem alloc] initWithTitle:@"Next Diagnostic" action:@selector(lspNextDiagnostic:) keyEquivalent:@""];
+		next.target = self;
+		[menu addItem:next];
+
+		NSMenuItem* prev = [[NSMenuItem alloc] initWithTitle:@"Previous Diagnostic" action:@selector(lspPrevDiagnostic:) keyEquivalent:@""];
+		prev.target = self;
+		[menu addItem:prev];
+	}
+}
+
+- (void)lspRestartServer:(id)sender
+{
+	[[LSPManager sharedManager] restartServerForDocument:self.document];
+}
+
+- (void)lspNextDiagnostic:(id)sender
+{
+	NSArray<NSString*>* types = @[ @"error", @"warning", @"note" ];
+	text::selection_t sel(to_s(_textView.selectionString));
+	text::pos_t caret = sel.last().max();
+	text::pos_t next = [self.document nextMarkOfTypes:types fromPosition:caret];
+	if(next != text::pos_t::undefined)
+	{
+		_textView.selectionString = to_ns(next);
+		[_textView centerSelectionInVisibleArea:self];
+	}
+}
+
+- (void)lspPrevDiagnostic:(id)sender
+{
+	NSArray<NSString*>* types = @[ @"error", @"warning", @"note" ];
+	text::selection_t sel(to_s(_textView.selectionString));
+	text::pos_t caret = sel.last().max();
+	text::pos_t prev = [self.document prevMarkOfTypes:types fromPosition:caret];
+	if(prev != text::pos_t::undefined)
+	{
+		_textView.selectionString = to_ns(prev);
+		[_textView centerSelectionInVisibleArea:self];
+	}
 }
 
 // ============

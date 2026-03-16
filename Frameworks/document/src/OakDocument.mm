@@ -1303,6 +1303,80 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	}
 }
 
+- (text::pos_t)nextMarkOfTypes:(NSArray<NSString*>*)types fromPosition:(text::pos_t const&)pos
+{
+	if(!self.isLoaded || !_buffer)
+		return text::pos_t::undefined;
+
+	std::set<std::string> typeSet;
+	for(NSString* type in types)
+		typeSet.insert(to_s(type));
+
+	size_t curIndex = _buffer->convert(pos);
+	size_t bufSize = _buffer->size();
+
+	// Search from cursor+1 to end
+	auto marks = _buffer->get_marks(curIndex + 1, bufSize);
+	for(auto const& pair : marks)
+	{
+		if(typeSet.count(pair.second.first))
+			return _buffer->convert(pair.first);
+	}
+
+	// Wrap: search from start, excluding current position
+	if(curIndex == 0)
+		return text::pos_t::undefined;
+	marks = _buffer->get_marks(0, curIndex - 1);
+	for(auto const& pair : marks)
+	{
+		if(typeSet.count(pair.second.first))
+			return _buffer->convert(pair.first);
+	}
+
+	return text::pos_t::undefined;
+}
+
+- (text::pos_t)prevMarkOfTypes:(NSArray<NSString*>*)types fromPosition:(text::pos_t const&)pos
+{
+	if(!self.isLoaded || !_buffer)
+		return text::pos_t::undefined;
+
+	std::set<std::string> typeSet;
+	for(NSString* type in types)
+		typeSet.insert(to_s(type));
+
+	size_t curIndex = _buffer->convert(pos);
+	size_t bufSize = _buffer->size();
+
+	// Search before cursor, excluding current position
+	text::pos_t result = text::pos_t::undefined;
+	if(curIndex > 0)
+	{
+		auto marks = _buffer->get_marks(0, curIndex - 1);
+		for(auto it = marks.rbegin(); it != marks.rend(); ++it)
+		{
+			if(typeSet.count(it->second.first))
+			{
+				result = _buffer->convert(it->first);
+				break;
+			}
+		}
+	}
+
+	if(result != text::pos_t::undefined)
+		return result;
+
+	// Wrap: search after cursor to end, take the last match
+	auto marks = _buffer->get_marks(curIndex + 1, bufSize);
+	for(auto it = marks.rbegin(); it != marks.rend(); ++it)
+	{
+		if(typeSet.count(it->second.first))
+			return _buffer->convert(it->first);
+	}
+
+	return text::pos_t::undefined;
+}
+
 - (void)enumerateByteRangesUsingBlock:(void(^)(char const* bytes, NSRange byteRange, BOOL* stop))block
 {
 	if(_buffer || (_backupPath && !self.isLoaded))

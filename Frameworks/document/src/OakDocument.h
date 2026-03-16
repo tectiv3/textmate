@@ -98,6 +98,8 @@ typedef NS_ENUM(NSInteger, OakDocumentIOResult) {
 - (void)enumerateSymbolsUsingBlock:(void(^)(text::pos_t const& pos, NSString* symbol))block;
 - (void)enumerateBookmarksUsingBlock:(void(^)(text::pos_t const& pos, NSString* excerpt))block;
 - (void)enumerateBookmarksAtLine:(NSUInteger)line block:(void(^)(text::pos_t const& pos, NSString* type, NSString* payload))block;
+- (text::pos_t)nextMarkOfTypes:(NSArray<NSString*>*)types fromPosition:(text::pos_t const&)pos;
+- (text::pos_t)prevMarkOfTypes:(NSArray<NSString*>*)types fromPosition:(text::pos_t const&)pos;
 - (void)enumerateByteRangesUsingBlock:(void(^)(char const* bytes, NSRange byteRange, BOOL* stop))block;
 - (NSArray<OakDocumentMatch*>*)matchesForString:(NSString*)searchString options:(find::options_t)options;
 - (NSArray<OakDocumentMatch*>*)matchesForString:(NSString*)searchString options:(find::options_t)options bufferSize:(NSUInteger*)bufferSize;
