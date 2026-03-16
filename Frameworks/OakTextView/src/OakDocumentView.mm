@@ -342,9 +342,13 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	if(oldDocument)
 		[oldDocument close];
 
-	dispatch_async(dispatch_get_main_queue(), ^{
-		[self updateLSPStatusBar];
-	});
+	if(aDocument)
+	{
+		__weak OakDocumentView* weakSelf = self;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[weakSelf updateLSPStatusBar];
+		});
+	}
 }
 
 - (void)updateStyle

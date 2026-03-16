@@ -61,7 +61,8 @@ import Combine
 					self.repositionWindow(window)
 					window.ignoresMouseEvents = false
 					// Defer ordering front so SwiftUI renders the toast content first
-					DispatchQueue.main.async {
+					DispatchQueue.main.async { [weak self] in
+						guard let window = self?.windowController?.window else { return }
 						window.alphaValue = 1
 						window.orderFrontRegardless()
 					}

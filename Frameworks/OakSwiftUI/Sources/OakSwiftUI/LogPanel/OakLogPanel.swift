@@ -29,6 +29,11 @@ private let kFrameKey = "OakLSPLogWindow.frame"
 		}
 	}
 
+	private func removeFrameObservers() {
+		frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
+		frameObservers.removeAll()
+	}
+
 	private func showPanel() {
 		if windowController == nil || windowController?.window == nil {
 			let hostingView = NSHostingView(rootView: LogView(model: model))
@@ -47,7 +52,7 @@ private let kFrameKey = "OakLSPLogWindow.frame"
 				window.center()
 			}
 
-			frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
+			removeFrameObservers()
 			for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
 				let token = NotificationCenter.default.addObserver(
 					forName: name, object: window, queue: .main
@@ -61,6 +66,14 @@ private let kFrameKey = "OakLSPLogWindow.frame"
 				}
 				frameObservers.append(token)
 			}
+			let closeToken = NotificationCenter.default.addObserver(
+				forName: NSWindow.willCloseNotification, object: window, queue: .main
+			) { _ in
+				DispatchQueue.main.async { [weak self] in
+					self?.removeFrameObservers()
+				}
+			}
+			frameObservers.append(closeToken)
 
 			windowController = NSWindowController(window: window)
 		}
