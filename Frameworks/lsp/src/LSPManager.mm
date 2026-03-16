@@ -750,7 +750,8 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	if(!client)
 		return;
 
-	// Collect documents before shutdown cleans up state
+	// Collect affected documents and clean up state synchronously
+	// so documentDidOpen: can re-register them with a fresh client
 	NSMutableArray<OakDocument*>* affectedDocs = [NSMutableArray new];
 	for(NSUUID* docId in _documentClients)
 	{
@@ -762,15 +763,38 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 		}
 	}
 
+	// Remove client from _clients so a new one will be created
+	NSString* rootToRemove = nil;
+	for(NSString* root in _clients)
+	{
+		if(_clients[root] == client)
+		{
+			rootToRemove = root;
+			break;
+		}
+	}
+	if(rootToRemove)
+		[_clients removeObjectForKey:rootToRemove];
+
+	// Dissociate documents before shutdown
+	for(OakDocument* doc in affectedDocs)
+	{
+		NSUUID* docId = doc.identifier;
+		[_changeTimers[docId] invalidate];
+		[_changeTimers removeObjectForKey:docId];
+		[_documentClients removeObjectForKey:docId];
+		[_documentVersions removeObjectForKey:docId];
+		[_openDocuments removeObject:docId];
+	}
+
+	// Old process shuts down asynchronously; lspClientDidTerminate: will be a no-op
 	[client shutdown];
 
-	// Defer re-open so lspClientDidTerminate: cleanup completes first
-	dispatch_async(dispatch_get_main_queue(), ^{
-		for(OakDocument* doc in affectedDocs)
-			[self documentDidOpen:doc];
+	// Re-open with fresh client immediately
+	for(OakDocument* doc in affectedDocs)
+		[self documentDidOpen:doc];
 
-		[NSNotificationCenter.defaultCenter postNotificationName:LSPServerStatusDidChangeNotification object:self];
-	});
+	[NSNotificationCenter.defaultCenter postNotificationName:LSPServerStatusDidChangeNotification object:self];
 }
 
 - (NSArray<NSDictionary*>*)diagnosticsForDocument:(OakDocument*)document atLine:(NSUInteger)line character:(NSUInteger)character endLine:(NSUInteger)endLine endCharacter:(NSUInteger)endCharacter

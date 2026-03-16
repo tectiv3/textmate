@@ -1323,8 +1323,10 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 			return _buffer->convert(pair.first);
 	}
 
-	// Wrap: search from start to cursor
-	marks = _buffer->get_marks(0, curIndex + 1);
+	// Wrap: search from start, excluding current position
+	if(curIndex == 0)
+		return text::pos_t::undefined;
+	marks = _buffer->get_marks(0, curIndex - 1);
 	for(auto const& pair : marks)
 	{
 		if(typeSet.count(pair.second.first))
@@ -1346,12 +1348,11 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	size_t curIndex = _buffer->convert(pos);
 	size_t bufSize = _buffer->size();
 
-	// Search from start to cursor, take the last match
+	// Search before cursor, excluding current position
 	text::pos_t result = text::pos_t::undefined;
 	if(curIndex > 0)
 	{
-		auto marks = _buffer->get_marks(0, curIndex);
-		// multimap is sorted by key — iterate in reverse for closest before cursor
+		auto marks = _buffer->get_marks(0, curIndex - 1);
 		for(auto it = marks.rbegin(); it != marks.rend(); ++it)
 		{
 			if(typeSet.count(it->second.first))
@@ -1365,8 +1366,8 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	if(result != text::pos_t::undefined)
 		return result;
 
-	// Wrap: search from cursor to end, take the last match
-	auto marks = _buffer->get_marks(curIndex, bufSize);
+	// Wrap: search after cursor to end, take the last match
+	auto marks = _buffer->get_marks(curIndex + 1, bufSize);
 	for(auto it = marks.rbegin(); it != marks.rend(); ++it)
 	{
 		if(typeSet.count(it->second.first))
