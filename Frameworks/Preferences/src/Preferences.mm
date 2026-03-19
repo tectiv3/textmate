@@ -5,6 +5,7 @@
 #import "VariablesPreferences.h"
 #import "TerminalPreferences.h"
 #import "FormattersPreferences.h"
+#import "AdvancedPreferences.h"
 #import "Keys.h"
 #import <OakAppKit/OakTransitionViewController.h>
 
@@ -100,7 +101,8 @@ static NSString* const kMASPreferencesSelectedViewKey = @"MASPreferences Selecte
 			[[BundlesPreferences alloc] init],
 			[[VariablesPreferences alloc] init],
 			[[FormattersPreferences alloc] init],
-			[[TerminalPreferences alloc] init]
+			[[TerminalPreferences alloc] init],
+			[[AdvancedPreferences alloc] init]
 		];
 
 		for(NSViewController* viewController in viewControllers)
