@@ -69,6 +69,8 @@ extern NSString* const kUserDefaultsLicenseOwnerKey;
 
 extern NSString* const kUserDefaultsDisableAntiAliasKey;
 extern NSString* const kUserDefaultsLineNumbersKey;
+extern NSString* const kUserDefaultsLineNumberScaleFactorKey;
+extern NSString* const kUserDefaultsLineNumberFontNameKey;
 
 // ==============
 // = Formatters =
@@ -81,3 +83,33 @@ extern NSString* const kUserDefaultsFormatterConfigurationsKey;
 // =========
 
 extern NSString* const kUserDefaultsFolderSearchFollowLinksKey;
+
+// ============
+// = Advanced =
+// ============
+
+// Editor
+extern NSString* const kUserDefaultsDisableTypingPairsKey;
+extern NSString* const kUserDefaultsFontSmoothingKey;
+extern NSString* const kUserDefaultsHideStatusBarKey;
+
+// Tabs
+extern NSString* const kUserDefaultsTabItemMinWidthKey;
+extern NSString* const kUserDefaultsTabItemMaxWidthKey;
+
+// Clipboard
+extern NSString* const kUserDefaultsDisablePersistentClipboardHistory;
+extern NSString* const kUserDefaultsClipboardHistoryKeepAtLeast;
+extern NSString* const kUserDefaultsClipboardHistoryKeepAtMost;
+extern NSString* const kUserDefaultsClipboardHistoryDaysToKeep;
+
+// Find
+extern NSString* const kUserDefaultsKeepSearchResultsOnDoubleClick;
+extern NSString* const kUserDefaultsAlwaysFindInDocument;
+
+// File Browser
+extern NSString* const kUserDefaultsDisableFolderStateRestore;
+
+// Bundles
+extern NSString* const kUserDefaultsDisableBundleSuggestionsKey;
+extern NSString* const kUserDefaultsGrammarsToNeverSuggestKey;

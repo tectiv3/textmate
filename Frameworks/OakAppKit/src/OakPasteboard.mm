@@ -1,5 +1,6 @@
 #import "OakPasteboard.h"
 #import "OakPasteboardSelector.h"
+#import <Preferences/Keys.h>
 #import <crash/info.h>
 #import <ns/ns.h>
 #import <oak/oak.h>
@@ -21,10 +22,6 @@ NSString* const OakFindIgnoreWhitespaceOption      = @"ignoreWhitespace";
 NSString* const OakFindFullWordsOption             = @"fullWordMatch";
 NSString* const OakFindRegularExpressionOption     = @"regularExpression";
 
-NSString* const kUserDefaultsDisablePersistentClipboardHistory = @"disablePersistentClipboardHistory";
-NSString* const kUserDefaultsClipboardHistoryKeepAtLeast       = @"clipboardHistoryKeepAtLeast";
-NSString* const kUserDefaultsClipboardHistoryKeepAtMost        = @"clipboardHistoryKeepAtMost";
-NSString* const kUserDefaultsClipboardHistoryDaysToKeep        = @"clipboardHistoryDaysToKeep";
 
 // ===========
 // = SQLite3 =
@@ -285,12 +282,6 @@ namespace
 {
 	static dispatch_once_t onceToken = 0;
 	dispatch_once(&onceToken, ^{
-		[NSUserDefaults.standardUserDefaults registerDefaults:@{
-			kUserDefaultsClipboardHistoryKeepAtLeast:  @25,
-			kUserDefaultsClipboardHistoryKeepAtMost:  @500,
-			kUserDefaultsClipboardHistoryDaysToKeep:   @30,
-		}];
-
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationDidBecomeActiveNotification:) name:NSApplicationDidBecomeActiveNotification object:NSApp];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationDidResignActiveNotification:) name:NSApplicationDidResignActiveNotification object:NSApp];
 	});
@@ -404,6 +395,10 @@ namespace
 				"   'value'            TEXT NOT NULL,"
 				"   UNIQUE (key)"
 				");"
+				"CREATE INDEX IF NOT EXISTS 'idx_flags_id' ON 'flags' ('id');"
+				"CREATE INDEX IF NOT EXISTS 'idx_groups_history_id' ON 'groups' ('history_id');"
+				"CREATE INDEX IF NOT EXISTS 'idx_groups_string_id' ON 'groups' ('string_id');"
+				"CREATE INDEX IF NOT EXISTS 'idx_history_clipboard_id' ON 'history' ('clipboard_id');"
 				"INSERT OR IGNORE INTO meta ('key', 'value') VALUES ('version', '1'),('uuid', :uuid)";
 
 			// Remove superfluous whitespace to improve output of sqlite3’s ‘.schema’ command

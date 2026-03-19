@@ -36,11 +36,6 @@
 #import <kvdb/kvdb.h>
 #import <crash/info.h>
 
-static NSString* const kUserDefaultsAlwaysFindInDocument = @"alwaysFindInDocument";
-static NSString* const kUserDefaultsDisableFolderStateRestore = @"disableFolderStateRestore";
-static NSString* const kUserDefaultsHideStatusBarKey = @"hideStatusBar";
-static NSString* const kUserDefaultsDisableBundleSuggestionsKey = @"disableBundleSuggestions";
-static NSString* const kUserDefaultsGrammarsToNeverSuggestKey = @"grammarsToNeverSuggest";
 
 static bool can_reach_host (char const* host)
 {

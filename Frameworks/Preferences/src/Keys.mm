@@ -30,6 +30,13 @@ static NSDictionary* default_settings ()
 		kUserDefaultsRMateServerPortKey:         @"52698",
 		kUserDefaultsLicenseOwnerKey:            NSFullUserName(),
 		kUserDefaultsLineNumbersKey:             @YES,
+		kUserDefaultsFontSmoothingKey:            @(3),
+		kUserDefaultsLineNumberScaleFactorKey:    @(0.8),
+		kUserDefaultsTabItemMinWidthKey:          @(120),
+		kUserDefaultsTabItemMaxWidthKey:          @(250),
+		kUserDefaultsClipboardHistoryKeepAtLeast: @(25),
+		kUserDefaultsClipboardHistoryKeepAtMost:  @(500),
+		kUserDefaultsClipboardHistoryDaysToKeep:  @(30),
 	};
 }
 
@@ -109,6 +116,8 @@ NSString* const kUserDefaultsLicenseOwnerKey            = @"licenseOwnerName";
 
 NSString* const kUserDefaultsDisableAntiAliasKey        = @"disableAntiAlias";
 NSString* const kUserDefaultsLineNumbersKey             = @"lineNumbers";
+NSString* const kUserDefaultsLineNumberScaleFactorKey   = @"lineNumberScaleFactor";
+NSString* const kUserDefaultsLineNumberFontNameKey      = @"lineNumberFontName";
 
 // ==============
 // = Formatters =
@@ -121,3 +130,22 @@ NSString* const kUserDefaultsFormatterConfigurationsKey = @"formatters";
 // =========
 
 NSString* const kUserDefaultsFolderSearchFollowLinksKey = @"folderSearchFollowLinks";
+
+// ============
+// = Advanced =
+// ============
+
+NSString* const kUserDefaultsDisableTypingPairsKey            = @"disableTypingPairs";
+NSString* const kUserDefaultsFontSmoothingKey                 = @"fontSmoothing";
+NSString* const kUserDefaultsHideStatusBarKey                 = @"hideStatusBar";
+NSString* const kUserDefaultsTabItemMinWidthKey               = @"tabItemMinWidth";
+NSString* const kUserDefaultsTabItemMaxWidthKey               = @"tabItemMaxWidth";
+NSString* const kUserDefaultsDisablePersistentClipboardHistory = @"disablePersistentClipboardHistory";
+NSString* const kUserDefaultsClipboardHistoryKeepAtLeast      = @"clipboardHistoryKeepAtLeast";
+NSString* const kUserDefaultsClipboardHistoryKeepAtMost       = @"clipboardHistoryKeepAtMost";
+NSString* const kUserDefaultsClipboardHistoryDaysToKeep       = @"clipboardHistoryDaysToKeep";
+NSString* const kUserDefaultsKeepSearchResultsOnDoubleClick   = @"keepSearchResultsOnDoubleClick";
+NSString* const kUserDefaultsAlwaysFindInDocument             = @"alwaysFindInDocument";
+NSString* const kUserDefaultsDisableFolderStateRestore        = @"disableFolderStateRestore";
+NSString* const kUserDefaultsDisableBundleSuggestionsKey      = @"disableBundleSuggestions";
+NSString* const kUserDefaultsGrammarsToNeverSuggestKey        = @"grammarsToNeverSuggest";

@@ -31,7 +31,7 @@
 static NSString* const kUserDefaultsFolderOptionsKey               = @"Folder Search Options";
 static NSString* const kUserDefaultsFindResultsHeightKey           = @"findResultsHeight";
 static NSString* const kUserDefaultsDefaultFindGlobsKey            = @"defaultFindInFolderGlobs";
-static NSString* const kUserDefaultsKeepSearchResultsOnDoubleClick = @"keepSearchResultsOnDoubleClick";
+
 static NSString* const kSearchMarkIdentifier                       = @"search";
 static NSString* const FFFindWasTriggeredByEnter                   = @"FFFindWasTriggeredByEnter";
 

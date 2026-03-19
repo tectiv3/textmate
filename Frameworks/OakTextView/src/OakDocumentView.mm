@@ -20,9 +20,7 @@
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakAppKit/NSMenuItem Additions.h>
 #import <BundleMenu/BundleMenu.h>
-
-static NSString* const kUserDefaultsLineNumberScaleFactorKey = @"lineNumberScaleFactor";
-static NSString* const kUserDefaultsLineNumberFontNameKey    = @"lineNumberFontName";
+#import <Preferences/Keys.h>
 
 static NSString* const kBookmarksColumnIdentifier = @"bookmarks";
 static NSString* const kFoldingsColumnIdentifier  = @"foldings";

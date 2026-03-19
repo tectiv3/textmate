@@ -7,9 +7,7 @@
 #import <OakFoundation/OakFoundation.h>
 #import <TMFileReference/TMFileReference.h>
 #import <oak/misc.h>
-
-static NSString* kUserDefaultsTabItemMinWidthKey = @"tabItemMinWidth";
-static NSString* kUserDefaultsTabItemMaxWidthKey = @"tabItemMaxWidth";
+#import <Preferences/Keys.h>
 
 static void DisableImplicitAnimationForBlock (void(^handler)())
 {
@@ -682,14 +680,6 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (instancetype)initWithFrame:(NSRect)aRect
 {
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		[NSUserDefaults.standardUserDefaults registerDefaults:@{
-			kUserDefaultsTabItemMinWidthKey: @(120),
-			kUserDefaultsTabItemMaxWidthKey: @(250),
-		}];
-	});
-
 	if(self = [super initWithFrame:aRect])
 	{
 		self.accessibilityRole  = NSAccessibilityTabGroupRole;

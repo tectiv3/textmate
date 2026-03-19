@@ -9,3 +9,4 @@ target_link_libraries(OakAppKit PUBLIC
 target_link_libraries(OakAppKit PRIVATE
   "-framework Carbon" "-framework Cocoa" "-framework AudioToolbox" "-framework Quartz"
   "-framework UniformTypeIdentifiers" sqlite3)
+target_link_libraries(OakAppKit PUBLIC Preferences)

@@ -56,8 +56,6 @@ int32_t const NSWrapColumnWindowWidth =  0;
 int32_t const NSWrapColumnAskUser     = -1;
 
 NSString* const kUserDefaultsWrapColumnPresetsKey  = @"wrapColumnPresets";
-NSString* const kUserDefaultsFontSmoothingKey      = @"fontSmoothing";
-NSString* const kUserDefaultsDisableTypingPairsKey = @"disableTypingPairs";
 NSString* const kUserDefaultsScrollPastEndKey      = @"scrollPastEnd";
 
 @interface OakAccessibleLink : NSObject
@@ -2191,7 +2189,6 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 		update_menu_key_equivalents([NSApp mainMenu], actionToKey);
 
 		[NSUserDefaults.standardUserDefaults registerDefaults:@{
-			kUserDefaultsFontSmoothingKey:     @(OTVFontSmoothingDisabledForDarkHiDPI),
 			kUserDefaultsWrapColumnPresetsKey: @[ @40, @80 ],
 		}];
 	});
