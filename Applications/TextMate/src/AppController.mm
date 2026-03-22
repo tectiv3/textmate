@@ -905,6 +905,12 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 	}
 }
 
+static KVDB* commandPaletteFrecencyDB ()
+{
+	NSString* appSupport = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingPathComponent:@"TextMate"];
+	return [KVDB sharedDBUsingFile:@"CommandPalette.db" inDirectory:appSupport];
+}
+
 - (NSArray<OakCommandPaletteItem*>*)recentProjectsForCommandPalette
 {
 	NSMutableArray* result = [NSMutableArray array];
@@ -952,6 +958,17 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 	[items addObjectsFromArray:[self recentProjectsForCommandPalette]];
 
 	[sharedCommandPalette showIn:keyWindow items:items];
+
+	KVDB* frecencyDB = commandPaletteFrecencyDB();
+	NSMutableDictionary* frecencyData = [NSMutableDictionary dictionary];
+	for(NSDictionary* pair in frecencyDB.allObjects)
+	{
+		NSString* key = pair[@"key"];
+		id value = pair[@"value"];
+		if(key && value)
+			frecencyData[key] = value;
+	}
+	[sharedCommandPalette loadFrecencyData:frecencyData];
 #endif
 }
 
@@ -1003,6 +1020,13 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 		default:
 			break;
 	}
+
+	// Update frecency
+	KVDB* db = commandPaletteFrecencyDB();
+	NSDictionary* existing = [db objectForKey:item.actionIdentifier];
+	NSInteger count = [existing[@"count"] integerValue] + 1;
+	NSTimeInterval now = [NSDate date].timeIntervalSinceReferenceDate;
+	[db setObject:@{ @"count": @(count), @"lastUsed": @(now) } forKey:item.actionIdentifier];
 }
 
 - (void)commandPaletteDidDismiss

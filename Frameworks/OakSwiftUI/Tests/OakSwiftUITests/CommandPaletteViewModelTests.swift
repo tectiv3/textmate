@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import OakSwiftUI
 
@@ -69,6 +70,31 @@ struct CommandPaletteViewModelTests {
 		vm.filterText = ">fmt"
 		#expect(vm.filteredItems.count == 1)
 		#expect(vm.filteredItems.first?.item.title == "Format File")
+	}
+
+	@Test func frecencyBoostIncreasesScoreForRecentItems() {
+		let vm = CommandPaletteViewModel()
+		let now = Date().timeIntervalSinceReferenceDate
+
+		vm.updateFrecency(for: "menu:formatFile:", at: now)
+		vm.updateFrecency(for: "menu:formatFile:", at: now)
+		vm.updateFrecency(for: "menu:formatFile:", at: now)
+
+		let boost = vm.frecencyBoost(for: "menu:formatFile:")
+		#expect(boost > 0)
+	}
+
+	@Test func frecencyBoostDecaysOverTime() {
+		let vm = CommandPaletteViewModel()
+		let now = Date().timeIntervalSinceReferenceDate
+		let oneWeekAgo = now - 168 * 3600
+
+		vm.updateFrecency(for: "old", at: oneWeekAgo)
+		vm.updateFrecency(for: "recent", at: now)
+
+		let oldBoost = vm.frecencyBoost(for: "old")
+		let recentBoost = vm.frecencyBoost(for: "recent")
+		#expect(recentBoost > oldBoost)
 	}
 
 	@Test func selectionNavigationWorks() {

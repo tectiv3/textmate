@@ -79,6 +79,16 @@ private class KeyablePanel: NSPanel {
 		self.panel = p
 	}
 
+	@objc public func loadFrecencyData(_ data: NSDictionary) {
+		var entries: [String: FrecencyEntry] = [:]
+		for case let (key as String, value as NSDictionary) in data {
+			let count = (value["count"] as? Int) ?? 0
+			let lastUsed = (value["lastUsed"] as? TimeInterval) ?? 0
+			entries[key] = FrecencyEntry(count: count, lastUsed: lastUsed)
+		}
+		viewModel?.loadFrecency(entries)
+	}
+
 	@objc public func dismiss() {
 		guard let p = panel else { return }
 		p.parent?.removeChildWindow(p)

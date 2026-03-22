@@ -73,6 +73,16 @@ public struct RankedItem: Identifiable, Sendable {
 	public var id: UUID { item.id }
 }
 
+public struct FrecencyEntry {
+	public var count: Int
+	public var lastUsed: TimeInterval
+
+	public init(count: Int, lastUsed: TimeInterval) {
+		self.count = count
+		self.lastUsed = lastUsed
+	}
+}
+
 @MainActor
 public class CommandPaletteViewModel: ObservableObject {
 	@Published public var filterText: String = "" {
@@ -88,6 +98,7 @@ public class CommandPaletteViewModel: ObservableObject {
 	public var onModeSwitch: ((PaletteMode) -> [OakCommandPaletteItem])?
 
 	private var itemsByMode: [PaletteMode: [OakCommandPaletteItem]] = [:]
+	public private(set) var frecencyData: [String: FrecencyEntry] = [:]
 
 	public init() {}
 
@@ -124,6 +135,25 @@ public class CommandPaletteViewModel: ObservableObject {
 
 	public func requestDismiss() {
 		onDismiss?()
+	}
+
+	public func updateFrecency(for identifier: String, at timestamp: TimeInterval? = nil) {
+		let ts = timestamp ?? Date().timeIntervalSinceReferenceDate
+		var entry = frecencyData[identifier] ?? FrecencyEntry(count: 0, lastUsed: ts)
+		entry.count += 1
+		entry.lastUsed = ts
+		frecencyData[identifier] = entry
+	}
+
+	public func frecencyBoost(for identifier: String) -> Double {
+		guard let entry = frecencyData[identifier] else { return 0 }
+		let now = Date().timeIntervalSinceReferenceDate
+		let hoursSinceLastUse = (now - entry.lastUsed) / 3600.0
+		return Double(min(entry.count, 20)) * exp(-hoursSinceLastUse / 168.0)
+	}
+
+	public func loadFrecency(_ data: [String: FrecencyEntry]) {
+		frecencyData = data
 	}
 
 	public var selectedItem: OakCommandPaletteItem? {
@@ -173,7 +203,9 @@ public class CommandPaletteViewModel: ObservableObject {
 		filteredItems = items
 			.compactMap { item -> RankedItem? in
 				guard let result = FuzzyMatcher.score(item.title, query: query) else { return nil }
-				return RankedItem(item: item, matchedIndices: result.matchedIndices, score: Double(result.score))
+				let frecency = frecencyBoost(for: item.actionIdentifier)
+				let combinedScore = Double(result.score) * (1.0 + frecency)
+				return RankedItem(item: item, matchedIndices: result.matchedIndices, score: combinedScore)
 			}
 			.sorted { $0.score > $1.score }
 	}
