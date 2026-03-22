@@ -1154,9 +1154,11 @@ updateFrecency:
 				case bundles::kItemTypeSnippet: kindStr = @"Snippet"; break;
 				default: kindStr = @"Bundle Item"; break;
 			}
+			NSString* bundleName = bundleItem->bundle() ? [NSString stringWithCxxString:bundleItem->bundle()->name()] : @"";
+			NSString* subtitle = bundleName.length ? [NSString stringWithFormat:@"%@ · %@", kindStr, bundleName] : kindStr;
 			OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
 				initWithTitle:name
-				     subtitle:kindStr
+				     subtitle:subtitle
 				keyEquivalent:@""
 				     category:OakCommandPaletteCategoryBundleEditor
 			     actionIdentifier:[NSString stringWithFormat:@"bundleeditor:%@", uuid]];
