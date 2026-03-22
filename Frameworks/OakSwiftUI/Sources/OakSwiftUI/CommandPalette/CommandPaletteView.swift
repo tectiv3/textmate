@@ -57,8 +57,10 @@ struct CommandPaletteView: View {
 						.id(ranked.id)
 						.contentShape(Rectangle())
 						.onTapGesture {
-							viewModel.selectedIndex = index
-							viewModel.acceptSelection()
+							if ranked.item.enabled {
+								viewModel.selectedIndex = index
+								viewModel.acceptSelection()
+							}
 						}
 					}
 				}

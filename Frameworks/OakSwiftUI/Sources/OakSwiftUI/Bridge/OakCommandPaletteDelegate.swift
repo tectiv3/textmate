@@ -4,4 +4,5 @@ import AppKit
 	func commandPaletteDidSelectItem(_ item: OakCommandPaletteItem)
 	func commandPaletteDidDismiss()
 	func commandPaletteRequestItems(forMode mode: Int) -> [OakCommandPaletteItem]
+	func commandPaletteSearchDocument(_ query: String) -> [OakCommandPaletteItem]
 }

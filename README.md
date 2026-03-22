@@ -59,6 +59,22 @@ make clean           # Remove all build dirs
 | ragel | Replaced | Hand-written parser |
 | boost (variant + crc) | Replaced | `std::variant` + zlib `crc32` |
 
+## Command Palette
+
+Press **Cmd+Shift+P** to open the command palette — a unified fuzzy-search interface for navigating TextMate. Type a prefix to switch modes:
+
+| Prefix | Mode | What it does |
+|--------|------|-------------|
+| (none) | Recent Projects | Open a recent project |
+| `>` | Commands | Run any menu action or bundle command |
+| `@` | Symbols | Jump to a symbol in the current document |
+| `#` | Bundle Editor | Open a grammar, snippet, or command in the bundle editor |
+| `:` | Go to Line | Jump to a line number |
+| `/` | Find in Project | Open Find in Project with a pre-filled query |
+| `~` | Settings | Toggle editor settings (soft wrap, invisibles, etc.) |
+
+Results are ranked by fuzzy match score. Frequently used items are boosted over time.
+
 ## LSP Support
 
 TextMate has built-in Language Server Protocol support for diagnostics and completions. Configure it per-project in `.tm_properties`:

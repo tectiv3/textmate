@@ -94,8 +94,8 @@ public class CommandPaletteViewModel: ObservableObject {
 
 	public var onItemSelected: ((OakCommandPaletteItem) -> Void)?
 	public var onDismiss: (() -> Void)?
-	// Called when mode switches and items for that mode haven't been loaded yet
 	public var onModeSwitch: ((PaletteMode) -> [OakCommandPaletteItem])?
+	public var onSearchDocument: ((String) -> [OakCommandPaletteItem])?
 
 	private var itemsByMode: [PaletteMode: [OakCommandPaletteItem]] = [:]
 	public private(set) var frecencyData: [String: FrecencyEntry] = [:]
@@ -130,7 +130,9 @@ public class CommandPaletteViewModel: ObservableObject {
 
 	public func acceptSelection() {
 		guard selectedIndex >= 0, selectedIndex < filteredItems.count else { return }
-		onItemSelected?(filteredItems[selectedIndex].item)
+		let item = filteredItems[selectedIndex].item
+		guard item.enabled else { return }
+		onItemSelected?(item)
 	}
 
 	public func requestDismiss() {
@@ -171,8 +173,23 @@ public class CommandPaletteViewModel: ObservableObject {
 
 		if newMode != activeMode {
 			activeMode = newMode
-			if itemsByMode[newMode] == nil, let items = onModeSwitch?(newMode) {
-				itemsByMode[newMode] = items
+			// goToLine generates synthetic items — no delegate needed
+			if newMode != .goToLine {
+				// Settings always re-fetch (titles change based on toggle state)
+				let shouldRefresh = newMode == .settings || itemsByMode[newMode] == nil
+				if shouldRefresh, let items = onModeSwitch?(newMode) {
+					itemsByMode[newMode] = items.isEmpty ? nil : items
+				}
+			}
+		}
+
+		// Find mode searches the current document — re-query on every keystroke
+		if activeMode == .findInProject {
+			let q = queryText
+			if !q.isEmpty, let items = onSearchDocument?(q), !items.isEmpty {
+				itemsByMode[.findInProject] = items
+			} else {
+				itemsByMode[.findInProject] = nil
 			}
 		}
 
@@ -182,15 +199,14 @@ public class CommandPaletteViewModel: ObservableObject {
 
 	private func applyFilter() {
 		let query = queryText
+
+		// GoToLine generates a synthetic item from the query
+		if activeMode == .goToLine {
+			filteredItems = goToLineItems(query: query)
+			return
+		}
+
 		guard let items = itemsByMode[activeMode] else {
-			if activeMode == .goToLine {
-				filteredItems = goToLineItems(query: query)
-				return
-			}
-			if activeMode == .findInProject {
-				filteredItems = findInProjectItems(query: query)
-				return
-			}
 			filteredItems = []
 			return
 		}
@@ -219,12 +235,5 @@ public class CommandPaletteViewModel: ObservableObject {
 		return [RankedItem(item: item, matchedIndices: [], score: 0)]
 	}
 
-	private func findInProjectItems(query: String) -> [RankedItem] {
-		let searchTerm = query.isEmpty ? "..." : "\"\(query)\""
-		let title = "Find \(searchTerm) in Project"
-		let item = OakCommandPaletteItem(
-			title: title, subtitle: "", keyEquivalent: "\u{21E7}\u{2318}F",
-			category: .findInProject, actionIdentifier: "find:\(query)")
-		return [RankedItem(item: item, matchedIndices: [], score: 0)]
-	}
+	// findInProject is no longer synthetic — items are provided by the delegate
 }

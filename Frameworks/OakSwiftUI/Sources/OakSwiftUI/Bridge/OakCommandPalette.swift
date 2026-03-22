@@ -8,6 +8,7 @@ private class KeyablePanel: NSPanel {
 
 @MainActor @objc public class OakCommandPalette: NSObject, NSWindowDelegate {
 	@objc public weak var delegate: OakCommandPaletteDelegate?
+	@objc public private(set) weak var parentWindow: NSWindow?
 
 	private let theme: OakThemeEnvironment
 	private var panel: KeyablePanel?
@@ -20,10 +21,18 @@ private class KeyablePanel: NSPanel {
 	}
 
 	@objc public func show(in parentWindow: NSWindow, items: [OakCommandPaletteItem]) {
-		dismiss()
+		// Tear down existing panel without notifying delegate
+		if let p = panel {
+			p.parent?.removeChildWindow(p)
+			p.orderOut(nil)
+			panel = nil
+			viewModel = nil
+			cancellables.removeAll()
+		}
+
+		self.parentWindow = parentWindow
 
 		let vm = CommandPaletteViewModel()
-		vm.setItems(items, forMode: .recentProjects)
 
 		let commands = items.filter {
 			$0.category == .menuAction || $0.category == .bundleCommand
@@ -34,14 +43,21 @@ private class KeyablePanel: NSPanel {
 		vm.setItems(projects, forMode: .recentProjects)
 
 		vm.onItemSelected = { [weak self] item in
-			self?.dismiss()
-			self?.delegate?.commandPaletteDidSelectItem(item)
+			guard let self else { return }
+			let parent = self.parentWindow
+			self.dismissWithoutNotify()
+			// Re-focus parent window so responder chain actions work
+			parent?.makeKeyAndOrderFront(nil)
+			self.delegate?.commandPaletteDidSelectItem(item)
 		}
 		vm.onDismiss = { [weak self] in
 			self?.dismiss()
 		}
 		vm.onModeSwitch = { [weak self] mode in
 			self?.delegate?.commandPaletteRequestItems(forMode: mode.intValue) ?? []
+		}
+		vm.onSearchDocument = { [weak self] query in
+			self?.delegate?.commandPaletteSearchDocument(query) ?? []
 		}
 
 		self.viewModel = vm
@@ -70,6 +86,7 @@ private class KeyablePanel: NSPanel {
 		p.isOpaque = false
 		p.backgroundColor = .clear
 		p.hasShadow = true
+		p.isMovableByWindowBackground = true
 		p.contentView = hostingView
 		p.delegate = self
 
@@ -89,13 +106,18 @@ private class KeyablePanel: NSPanel {
 		viewModel?.loadFrecency(entries)
 	}
 
-	@objc public func dismiss() {
+	private func dismissWithoutNotify() {
 		guard let p = panel else { return }
 		p.parent?.removeChildWindow(p)
 		p.orderOut(nil)
 		panel = nil
 		viewModel = nil
 		cancellables.removeAll()
+	}
+
+	@objc public func dismiss() {
+		guard panel != nil else { return }
+		dismissWithoutNotify()
 		delegate?.commandPaletteDidDismiss()
 	}
 
@@ -106,8 +128,8 @@ private class KeyablePanel: NSPanel {
 	// MARK: - NSWindowDelegate
 
 	nonisolated public func windowDidResignKey(_ notification: Notification) {
-		MainActor.assumeIsolated {
-			dismiss()
+		Task { @MainActor in
+			self.dismiss()
 		}
 	}
 }

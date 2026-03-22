@@ -874,6 +874,7 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 
 - (void)collectMenuItems:(NSMenu*)menu path:(NSString*)path into:(NSMutableArray<OakCommandPaletteItem*>*)result bundleUUIDs:(NSMutableSet<NSString*>*)uuids
 {
+	[menu update]; // Force menu validation so titles reflect current state (Show/Hide)
 	for(NSMenuItem* item in menu.itemArray)
 	{
 		if(item.isSeparatorItem || item.isHidden || item.title.length == 0)
@@ -885,6 +886,8 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 
 		if(item.hasSubmenu)
 		{
+			if(item.submenu == NSApp.servicesMenu)
+				continue;
 			[self collectMenuItems:item.submenu path:itemPath into:result bundleUUIDs:uuids];
 		}
 		else if(item.action)
@@ -917,10 +920,15 @@ static KVDB* commandPaletteFrecencyDB ()
 	NSString* appSupport = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingPathComponent:@"TextMate"];
 	KVDB* db = [KVDB sharedDBUsingFile:@"RecentProjects.db" inDirectory:appSupport];
 
-	for(NSDictionary* pair in db.allObjects)
+	NSArray* sorted = [db.allObjects sortedArrayUsingDescriptors:@[
+		[NSSortDescriptor sortDescriptorWithKey:@"value.lastRecentlyUsed" ascending:NO],
+		[NSSortDescriptor sortDescriptorWithKey:@"key.lastPathComponent" ascending:YES selector:@selector(localizedCompare:)]
+	]];
+
+	for(NSDictionary* pair in sorted)
 	{
 		NSString* path = pair[@"key"];
-		if(!path || ![NSFileManager.defaultManager fileExistsAtPath:path])
+		if(!path || access(path.fileSystemRepresentation, F_OK) != 0)
 			continue;
 
 		OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
@@ -957,6 +965,20 @@ static KVDB* commandPaletteFrecencyDB ()
 	[self collectMenuItems:NSApp.mainMenu path:@"" into:items bundleUUIDs:bundleUUIDs];
 	[items addObjectsFromArray:[self recentProjectsForCommandPalette]];
 
+	// Add "Reveal in Finder" for the current document
+	DocumentWindowController* docController = [keyWindow.delegate isKindOfClass:[DocumentWindowController class]] ? (DocumentWindowController*)keyWindow.delegate : nil;
+	if(NSString* path = docController.selectedDocument.path)
+	{
+		OakCommandPaletteItem* revealItem = [[OakCommandPaletteItem alloc]
+			initWithTitle:@"Reveal in Finder"
+			     subtitle:path.lastPathComponent
+			keyEquivalent:@""
+			     category:OakCommandPaletteCategoryMenuAction
+		     actionIdentifier:[NSString stringWithFormat:@"reveal:%@", path]];
+		[items addObject:revealItem];
+	}
+
+	NSLog(@"CommandPalette: showing with %lu menu items, parentWindow=%@", (unsigned long)items.count, keyWindow.title);
 	[sharedCommandPalette showIn:keyWindow items:items];
 
 	KVDB* frecencyDB = commandPaletteFrecencyDB();
@@ -975,13 +997,32 @@ static KVDB* commandPaletteFrecencyDB ()
 #if HAVE_OAK_SWIFTUI
 - (void)commandPaletteDidSelectItem:(OakCommandPaletteItem*)item
 {
+	NSLog(@"CommandPalette: selected item title='%@' category=%ld actionId='%@'", item.title, (long)item.category, item.actionIdentifier);
+
+	// Handle custom actions by actionIdentifier prefix
+	if([item.actionIdentifier hasPrefix:@"reveal:"])
+	{
+		NSString* path = [item.actionIdentifier substringFromIndex:7];
+		[NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:path]]];
+		goto updateFrecency;
+	}
+
 	switch(item.category)
 	{
 		case OakCommandPaletteCategoryMenuAction:
 		{
 			NSMenuItem* menuItem = item.sourceMenuItem;
 			if(menuItem && menuItem.action)
-				[NSApp sendAction:menuItem.action to:menuItem.target from:self];
+			{
+				@try {
+					id target = [NSApp targetForAction:menuItem.action to:menuItem.target from:menuItem];
+					if(target)
+						[NSApp sendAction:menuItem.action to:target from:menuItem];
+				}
+				@catch (NSException* e) {
+					NSLog(@"CommandPalette: failed to execute '%@': %@", item.title, e.reason);
+				}
+			}
 			break;
 		}
 		case OakCommandPaletteCategoryBundleCommand:
@@ -1002,25 +1043,56 @@ static KVDB* commandPaletteFrecencyDB ()
 			NSInteger lineNumber = lineStr.integerValue;
 			if(lineNumber > 0)
 			{
+				// Use selectAndCenter: — same as performGoToLine:
 				NSString* selStr = [NSString stringWithFormat:@"%ld", (long)lineNumber];
-				id target = [NSApp targetForAction:@selector(setSelectionString:)];
-				if([target respondsToSelector:@selector(setSelectionString:)])
-					[target performSelector:@selector(setSelectionString:) withObject:selStr];
+				[NSApp sendAction:@selector(selectAndCenter:) to:nil from:selStr];
 			}
 			break;
 		}
 		case OakCommandPaletteCategoryFindInProject:
 		{
-			NSString* query = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"find:" withString:@""];
-			[[NSPasteboard pasteboardWithName:NSPasteboardNameFind] clearContents];
-			[[NSPasteboard pasteboardWithName:NSPasteboardNameFind] setString:query forType:NSPasteboardTypeString];
-			[self orderFrontFindPanel:self];
+			// actionIdentifier is "find:<line>:<column>" — jump to the matched line
+			NSString* ident = item.actionIdentifier;
+			NSRange firstColon = [ident rangeOfString:@":"];
+			if(firstColon.location != NSNotFound)
+			{
+				NSString* selStr = [ident substringFromIndex:firstColon.location + 1];
+				[NSApp sendAction:@selector(selectAndCenter:) to:nil from:selStr];
+			}
+			break;
+		}
+		case OakCommandPaletteCategorySetting:
+		{
+			NSString* selectorName = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"setting:" withString:@""];
+			SEL action = NSSelectorFromString(selectorName);
+			if(action)
+				[NSApp sendAction:action to:nil from:self];
+			break;
+		}
+		case OakCommandPaletteCategorySymbol:
+		{
+			// actionIdentifier format: "symbol:<name>:<line>:<column>"
+			NSString* ident = item.actionIdentifier;
+			NSRange lastColon = [ident rangeOfString:@":" options:NSBackwardsSearch];
+			NSRange prevColon = [ident rangeOfString:@":" options:NSBackwardsSearch range:NSMakeRange(0, lastColon.location)];
+			if(lastColon.location != NSNotFound && prevColon.location != NSNotFound)
+			{
+				NSString* selStr = [ident substringFromIndex:prevColon.location + 1];
+				[NSApp sendAction:@selector(selectAndCenter:) to:nil from:selStr];
+			}
+			break;
+		}
+		case OakCommandPaletteCategoryBundleEditor:
+		{
+			NSString* uuid = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"bundleeditor:" withString:@""];
+			[[BundleEditor sharedInstance] revealBundleItem:bundles::lookup(to_s(uuid))];
 			break;
 		}
 		default:
 			break;
 	}
 
+updateFrecency:
 	// Update frecency
 	KVDB* db = commandPaletteFrecencyDB();
 	NSDictionary* existing = [db objectForKey:item.actionIdentifier];
@@ -1035,32 +1107,134 @@ static KVDB* commandPaletteFrecencyDB ()
 
 - (NSArray<OakCommandPaletteItem*>*)commandPaletteRequestItemsForMode:(NSInteger)mode
 {
-	if(mode == 6) // settings
+	NSLog(@"CommandPalette: requestItemsForMode:%ld", (long)mode);
+	if(mode == 2) // symbols
 	{
 		NSMutableArray* result = [NSMutableArray array];
-		NSArray<NSArray<NSString*>*>* settings = @[
-			@[@"Soft Wrap",         @"softWrap"],
-			@[@"Show Invisibles",   @"showInvisibles"],
-			@[@"Soft Tabs",         @"softTabs"],
-			@[@"Spell Checking",    @"spellChecking"],
-			@[@"Show Line Numbers", @"showLineNumbers"],
-		];
-
-		for(NSArray<NSString*>* pair in settings)
+		// Use the palette's stored parent window (not keyWindow, which is the palette itself)
+		NSWindow* docWindow = sharedCommandPalette.parentWindow;
+		DocumentWindowController* controller = [docWindow.delegate isKindOfClass:[DocumentWindowController class]] ? (DocumentWindowController*)docWindow.delegate : nil;
+		OakDocument* doc = controller.selectedDocument;
+		if(doc)
 		{
-			NSString* title = pair[0];
-			NSString* key = pair[1];
+			[doc enumerateSymbolsUsingBlock:^(text::pos_t const& pos, NSString* symbol){
+				if([symbol isEqualToString:@"-"])
+					return;
+
+				NSString* cleanSymbol = [symbol stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+				NSString* selStr = [NSString stringWithFormat:@"%zu:%zu", pos.line+1, pos.column+1];
+				OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
+					initWithTitle:cleanSymbol
+					     subtitle:@""
+					keyEquivalent:@""
+					     category:OakCommandPaletteCategorySymbol
+				     actionIdentifier:[NSString stringWithFormat:@"symbol:%@:%@", cleanSymbol, selStr]];
+				[result addObject:item];
+			}];
+		}
+		NSLog(@"CommandPalette: symbols mode returning %lu items (doc=%@, controller=%@)", (unsigned long)result.count, doc, controller);
+		return result;
+	}
+	if(mode == 3) // bundleEditor
+	{
+		NSMutableArray* result = [NSMutableArray array];
+		auto const items = bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeCommand|bundles::kItemTypeGrammar|bundles::kItemTypeSnippet);
+		for(auto const& bundleItem : items)
+		{
+			if(bundleItem->hidden_from_user())
+				continue;
+
+			NSString* name = [NSString stringWithCxxString:bundleItem->name()];
+			NSString* uuid = [NSString stringWithCxxString:to_s(bundleItem->uuid())];
+			NSString* kindStr;
+			switch(bundleItem->kind())
+			{
+				case bundles::kItemTypeCommand: kindStr = @"Command"; break;
+				case bundles::kItemTypeGrammar: kindStr = @"Grammar"; break;
+				case bundles::kItemTypeSnippet: kindStr = @"Snippet"; break;
+				default: kindStr = @"Bundle Item"; break;
+			}
 			OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
-				initWithTitle:title
-				     subtitle:@""
+				initWithTitle:name
+				     subtitle:kindStr
 				keyEquivalent:@""
-				     category:OakCommandPaletteCategorySetting
-			     actionIdentifier:[NSString stringWithFormat:@"setting:%@", key]];
+				     category:OakCommandPaletteCategoryBundleEditor
+			     actionIdentifier:[NSString stringWithFormat:@"bundleeditor:%@", uuid]];
 			[result addObject:item];
 		}
 		return result;
 	}
+	if(mode == 6) // settings — pull live titles from the View menu
+	{
+		NSMutableArray* result = [NSMutableArray array];
+		// Toggle selectors that qualify as "settings"
+		NSSet<NSString*>* settingSelectors = [NSSet setWithArray:@[
+			@"toggleSoftWrap:", @"toggleShowInvisibles:", @"toggleLineNumbers:",
+			@"toggleShowWrapColumn:", @"toggleShowIndentGuides:",
+			@"toggleContinuousSpellChecking:", @"toggleScrollPastEnd:",
+		]];
+
+		// Walk the View menu to get live titles (e.g. "Hide Invisibles" vs "Show Invisibles")
+		for(NSMenuItem* menuItem in NSApp.mainMenu.itemArray)
+		{
+			if(!menuItem.hasSubmenu)
+				continue;
+			for(NSMenuItem* sub in menuItem.submenu.itemArray)
+			{
+				if(!sub.action)
+					continue;
+				NSString* sel = NSStringFromSelector(sub.action);
+				if([settingSelectors containsObject:sel])
+				{
+					OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
+						initWithTitle:sub.title
+						     subtitle:@""
+						keyEquivalent:formattedKeyEquivalent(sub)
+						     category:OakCommandPaletteCategorySetting
+					     actionIdentifier:[NSString stringWithFormat:@"setting:%@", sel]];
+					item.sourceMenuItem = sub;
+					[result addObject:item];
+				}
+			}
+		}
+		return result;
+	}
 	return @[];
+}
+
+- (NSArray<OakCommandPaletteItem*>*)commandPaletteSearchDocument:(NSString*)query
+{
+	NSLog(@"CommandPalette: searchDocument:'%@'", query);
+	if(query.length == 0)
+		return @[];
+
+	NSWindow* docWindow = sharedCommandPalette.parentWindow;
+	DocumentWindowController* controller = [docWindow.delegate isKindOfClass:[DocumentWindowController class]] ? (DocumentWindowController*)docWindow.delegate : nil;
+	OakDocument* doc = controller.selectedDocument;
+	if(!doc || !doc.content)
+		return @[];
+
+	NSMutableArray* result = [NSMutableArray array];
+	__block NSUInteger lineNumber = 0;
+	[doc.content enumerateLinesUsingBlock:^(NSString* line, BOOL* stop){
+		lineNumber++;
+		NSRange range = [line rangeOfString:query options:NSCaseInsensitiveSearch];
+		if(range.location != NSNotFound)
+		{
+			NSString* trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+			OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
+				initWithTitle:trimmed
+				     subtitle:[NSString stringWithFormat:@"Line %lu", (unsigned long)lineNumber]
+				keyEquivalent:@""
+				     category:OakCommandPaletteCategoryFindInProject
+			     actionIdentifier:[NSString stringWithFormat:@"find:%lu", (unsigned long)lineNumber]];
+			[result addObject:item];
+		}
+		if(result.count >= 50)
+			*stop = YES;
+	}];
+	NSLog(@"CommandPalette: searchDocument found %lu matches", (unsigned long)result.count);
+	return result;
 }
 #endif
 
