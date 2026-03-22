@@ -153,6 +153,14 @@ public class CommandPaletteViewModel: ObservableObject {
 	private func applyFilter() {
 		let query = queryText
 		guard let items = itemsByMode[activeMode] else {
+			if activeMode == .goToLine {
+				filteredItems = goToLineItems(query: query)
+				return
+			}
+			if activeMode == .findInProject {
+				filteredItems = findInProjectItems(query: query)
+				return
+			}
 			filteredItems = []
 			return
 		}
@@ -168,5 +176,23 @@ public class CommandPaletteViewModel: ObservableObject {
 				return RankedItem(item: item, matchedIndices: result.matchedIndices, score: Double(result.score))
 			}
 			.sorted { $0.score > $1.score }
+	}
+
+	private func goToLineItems(query: String) -> [RankedItem] {
+		let lineStr = query.isEmpty ? "..." : query
+		let title = "Go to line \(lineStr)"
+		let item = OakCommandPaletteItem(
+			title: title, subtitle: "", keyEquivalent: "",
+			category: .goToLine, actionIdentifier: "line:\(query)")
+		return [RankedItem(item: item, matchedIndices: [], score: 0)]
+	}
+
+	private func findInProjectItems(query: String) -> [RankedItem] {
+		let searchTerm = query.isEmpty ? "..." : "\"\(query)\""
+		let title = "Find \(searchTerm) in Project"
+		let item = OakCommandPaletteItem(
+			title: title, subtitle: "", keyEquivalent: "\u{21E7}\u{2318}F",
+			category: .findInProject, actionIdentifier: "find:\(query)")
+		return [RankedItem(item: item, matchedIndices: [], score: 0)]
 	}
 }

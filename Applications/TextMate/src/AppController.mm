@@ -1011,6 +1011,31 @@ static NSString* formattedKeyEquivalent (NSMenuItem* item)
 
 - (NSArray<OakCommandPaletteItem*>*)commandPaletteRequestItemsForMode:(NSInteger)mode
 {
+	if(mode == 6) // settings
+	{
+		NSMutableArray* result = [NSMutableArray array];
+		NSArray<NSArray<NSString*>*>* settings = @[
+			@[@"Soft Wrap",         @"softWrap"],
+			@[@"Show Invisibles",   @"showInvisibles"],
+			@[@"Soft Tabs",         @"softTabs"],
+			@[@"Spell Checking",    @"spellChecking"],
+			@[@"Show Line Numbers", @"showLineNumbers"],
+		];
+
+		for(NSArray<NSString*>* pair in settings)
+		{
+			NSString* title = pair[0];
+			NSString* key = pair[1];
+			OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
+				initWithTitle:title
+				     subtitle:@""
+				keyEquivalent:@""
+				     category:OakCommandPaletteCategorySetting
+			     actionIdentifier:[NSString stringWithFormat:@"setting:%@", key]];
+			[result addObject:item];
+		}
+		return result;
+	}
 	return @[];
 }
 #endif
