@@ -379,12 +379,26 @@ static NSString* fileFromParams (json const& params)
 			}
 			else
 			{
-				json response = {
-					{"jsonrpc", "2.0"},
-					{"id",      requestId},
-					{"result",  json::object()}
-				};
-				[self sendMessage:response];
+				if([_delegate respondsToSelector:@selector(lspClient:handleServerRequest:params:)])
+				{
+					NSDictionary* params = msg.contains("params") ? [self convertJSON:msg["params"]] : @{};
+					id result = [_delegate lspClient:self handleServerRequest:to_ns(method) params:params];
+					json response = {
+						{"jsonrpc", "2.0"},
+						{"id",      requestId},
+						{"result",  result ? [self convertToJSON:result] : json::object()}
+					};
+					[self sendMessage:response];
+				}
+				else
+				{
+					json response = {
+						{"jsonrpc", "2.0"},
+						{"id",      requestId},
+						{"result",  json::object()}
+					};
+					[self sendMessage:response];
+				}
 			}
 		}
 		else if(method == "textDocument/publishDiagnostics")
@@ -453,6 +467,9 @@ static NSString* fileFromParams (json const& params)
 
 			NSMutableString* logMsg = [NSMutableString stringWithFormat:@"%@ (id=%d) initialized", method ?: @"initialize", reqId];
 			[self sendNotification:@"initialized" params:json::object()];
+
+			if([_delegate respondsToSelector:@selector(lspClientDidInitialize:)])
+				[_delegate lspClientDidInitialize:self];
 
 			if(msg["result"].contains("capabilities"))
 			{
@@ -806,6 +823,26 @@ static NSString* fileFromParams (json const& params)
 	[self sendMessage:response];
 }
 
+- (int)sendCustomRequest:(NSString*)method params:(NSDictionary*)params completion:(void(^)(id))callback
+{
+	if(!_initialized)
+	{
+		if(callback)
+			callback(nil);
+		return -1;
+	}
+	json jsonParams = params ? [self convertToJSON:params] : json::object();
+	return [self sendRequest:method params:jsonParams callback:callback];
+}
+
+- (void)sendCustomNotification:(NSString*)method params:(NSDictionary*)params
+{
+	if(!_initialized)
+		return;
+	json jsonParams = params ? [self convertToJSON:params] : json::object();
+	[self sendNotification:method params:jsonParams];
+}
+
 - (id)convertJSON:(json const&)value
 {
 	if(value.is_null())
@@ -855,7 +892,8 @@ static NSString* fileFromParams (json const& params)
 		return json([obj UTF8String]);
 	else if([obj isKindOfClass:[NSNumber class]])
 	{
-		if(strcmp([obj objCType], @encode(BOOL)) == 0)
+		// @YES/@NO are CFBoolean singletons — objCType is "c" not "B" on arm64
+		if(obj == (id)kCFBooleanTrue || obj == (id)kCFBooleanFalse)
 			return json([obj boolValue]);
 		else if(strcmp([obj objCType], @encode(double)) == 0 || strcmp([obj objCType], @encode(float)) == 0)
 			return json([obj doubleValue]);

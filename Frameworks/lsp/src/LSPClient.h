@@ -10,6 +10,8 @@
 @optional
 - (void)lspClientDidTerminate:(LSPClient*)client;
 - (void)lspClient:(LSPClient*)client didReceiveApplyEditRequest:(NSDictionary*)workspaceEdit requestId:(int)requestId;
+- (void)lspClientDidInitialize:(LSPClient*)client;
+- (id)lspClient:(LSPClient*)client handleServerRequest:(NSString*)method params:(NSDictionary*)params;
 @end
 
 extern NSString* const LSPLogNotification;
@@ -46,6 +48,10 @@ extern NSString* const LSPProgressNotification;
 - (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments completion:(void(^)(id))callback;
 - (void)cancelRequest:(int)requestId;
 - (void)respondToApplyEdit:(int)requestId applied:(BOOL)applied failureReason:(NSString*)reason;
+
+// Generic JSON-RPC methods for non-standard LSP extensions (e.g., Copilot)
+- (int)sendCustomRequest:(NSString*)method params:(NSDictionary*)params completion:(void(^)(id))callback;
+- (void)sendCustomNotification:(NSString*)method params:(NSDictionary*)params;
 @end
 
 #endif /* LSP_CLIENT_H_POC */
