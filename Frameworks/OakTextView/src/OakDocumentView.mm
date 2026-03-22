@@ -1039,6 +1039,21 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 		[menu addItem:restart];
 	}
 
+	if(copilot.status == CopilotStatusReady)
+	{
+		[menu addItem:[NSMenuItem separatorItem]];
+
+		BOOL popupSuppressed = [[NSUserDefaults standardUserDefaults] boolForKey:@"CopilotSuppressAutoPopup"];
+		NSMenuItem* suppressItem = [[NSMenuItem alloc] initWithTitle:@"Ghost Text Only (No Popup)"
+		                                                      action:@selector(copilotToggleSuppressPopup:)
+		                                               keyEquivalent:@""];
+		suppressItem.target = self;
+		suppressItem.state = popupSuppressed ? NSControlStateValueOn : NSControlStateValueOff;
+		[menu addItem:suppressItem];
+	}
+
+	[menu addItem:[NSMenuItem separatorItem]];
+
 	NSMenuItem* disable = [[NSMenuItem alloc] initWithTitle:
 		copilot.status == CopilotStatusDisabled ? @"Enable Copilot" : @"Disable Copilot"
 		action:@selector(copilotToggle:) keyEquivalent:@""];
@@ -1071,6 +1086,13 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	{
 		[copilot shutdown];
 	}
+}
+
+- (void)copilotToggleSuppressPopup:(id)sender
+{
+	NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+	BOOL current = [defaults boolForKey:@"CopilotSuppressAutoPopup"];
+	[defaults setBool:!current forKey:@"CopilotSuppressAutoPopup"];
 }
 
 - (void)showLSPStatusMenu:(NSPopUpButton*)popUpButton

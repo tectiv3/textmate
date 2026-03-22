@@ -609,10 +609,10 @@ static NSString* languageIdForDocument(OakDocument* doc)
 
 // MARK: - Completion
 
-- (void)requestCompletionForDocument:(OakDocument*)document
-                                line:(NSUInteger)line
-                           character:(NSUInteger)character
-                          completion:(void(^)(NSArray<NSDictionary*>* items))callback
+- (int)requestCompletionForDocument:(OakDocument*)document
+                               line:(NSUInteger)line
+                          character:(NSUInteger)character
+                         completion:(void(^)(NSArray<NSDictionary*>* items))callback
 {
 	NSString* uri = uriForDocument(document);
 	if(!uri || !_client.initialized)
@@ -620,7 +620,7 @@ static NSString* languageIdForDocument(OakDocument* doc)
 		[self log:[NSString stringWithFormat:@"Cannot request completion: uri=%@ initialized=%d", uri, _client.initialized]];
 		if(callback)
 			callback(nil);
-		return;
+		return 0;
 	}
 
 	if(![_openURIs containsObject:uri])
@@ -646,9 +646,9 @@ static NSString* languageIdForDocument(OakDocument* doc)
 		@"context":      @{@"triggerKind": @1},
 	};
 
-	[_client sendCustomRequest:@"textDocument/inlineCompletion"
-	                    params:params
-	                completion:^(id result) {
+	int requestId = [_client sendCustomRequest:@"textDocument/inlineCompletion"
+	                                    params:params
+	                                completion:^(id result) {
 		NSArray* items = nil;
 		if([result isKindOfClass:[NSDictionary class]])
 			items = result[@"items"];
@@ -660,6 +660,13 @@ static NSString* languageIdForDocument(OakDocument* doc)
 		if(callback)
 			callback(items);
 	}];
+	return requestId;
+}
+
+- (void)cancelCompletionRequest:(int)requestId
+{
+	if(requestId && _client.initialized)
+		[_client cancelRequest:requestId];
 }
 
 // MARK: - Logging

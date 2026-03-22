@@ -46,6 +46,16 @@ Before you submit a bug report please read the [writing bug reports](https://git
   <img src="docs/screenshots/lsp/lsp-status.png" width="200" alt="LSP Status Bar">
 </p>
 
+### Copilot
+
+<p align="center">
+  <img src="docs/screenshots/copilot/ghost-text.png" width="480" alt="Ghost Text Suggestions">
+</p>
+<p align="center">
+  <img src="docs/screenshots/copilot/completion.png" width="320" alt="Copilot Completion">
+  <img src="docs/screenshots/copilot/copilot-menu.png" width="200" alt="Copilot Status Menu">
+</p>
+
 # Building
 
 ## Setup

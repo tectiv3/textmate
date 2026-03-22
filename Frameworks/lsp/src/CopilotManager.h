@@ -28,10 +28,12 @@ typedef NS_ENUM(NSInteger, CopilotStatus) {
 - (void)documentWillClose:(OakDocument*)document;
 - (void)documentDidFocus:(OakDocument*)document;
 
-- (void)requestCompletionForDocument:(OakDocument*)document
-                                line:(NSUInteger)line
-                           character:(NSUInteger)character
-                          completion:(void(^)(NSArray<NSDictionary*>* items))callback;
+- (int)requestCompletionForDocument:(OakDocument*)document
+                               line:(NSUInteger)line
+                          character:(NSUInteger)character
+                         completion:(void(^)(NSArray<NSDictionary*>* items))callback;
+
+- (void)cancelCompletionRequest:(int)requestId;
 
 - (void)sendAcceptanceTelemetry:(NSDictionary*)command;
 - (void)sendDidShowCompletion:(NSDictionary*)item;

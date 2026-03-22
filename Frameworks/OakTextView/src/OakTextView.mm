@@ -15,6 +15,11 @@
 #import <OakAppKit/OakPopOutAnimation.h>
 #import <OakAppKit/OakToolTip.h>
 #import <OakAppKit/OakSound.h>
+#import <OakAppKit/OakSyntaxFormatter.h>
+#import <theme/OakTheme.h>
+#import <parse/parse.h>
+#import <parse/grammar.h>
+#import <text/utf16.h>
 #import <OakFoundation/NSString Additions.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/OakFindProtocol.h>
@@ -554,6 +559,13 @@ private:
 	// = Copilot =
 	BOOL _copilotCompletionActive;
 
+	// = Copilot Ghost Text =
+	NSString* _ghostText;
+	NSDictionary* _ghostTextItem;
+	size_t _ghostTextCaret;
+	int _ghostTextRequestId;
+	NSTimer* _ghostTextTimer;
+
 	// =================
 	// = Accessibility =
 	// =================
@@ -567,6 +579,10 @@ private:
 - (void)updateSymbol;
 - (void)updateMarkedRanges;
 - (void)redisplayFrom:(size_t)from to:(size_t)to;
+- (void)scheduleCopilotGhostText;
+- (void)clearGhostText;
+- (BOOL)hasGhostText;
+- (void)acceptGhostText;
 - (NSImage*)imageForRanges:(ng::ranges_t const&)ranges imageRect:(NSRect*)outRect;
 @property (nonatomic, readonly) ng::ranges_t markedRanges;
 @property (nonatomic) NSDate* lastFlagsChangeDate;
@@ -664,6 +680,10 @@ struct refresh_helper_t
 					[_self updateMarkedRanges];
 					[_self updateSelection];
 					[_self updateSymbol];
+
+					// Schedule ghost text after typing stops
+					if(_revision != documentView->revision())
+						[_self scheduleCopilotGhostText];
 				}
 
 				auto damagedRects = documentView->end_refresh_cycle(merge(documentView->ranges(), [_self markedRanges]), [_self visibleRect], [_self liveSearchRanges]);
@@ -782,6 +802,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 - (void)showLSPHoverTooltip:(OakTooltipContent*)content atRect:(NSRect)viewRect;
 - (OakTooltipContent*)createTooltipContentFromHover:(NSDictionary*)hover;
 - (NSAttributedString*)parseMarkdownToAttributedString:(NSString*)markdown;
+- (NSMutableAttributedString*)syntaxHighlight:(NSString*)code withGrammar:(NSString*)grammarScope;
 @end
 
 @implementation OakTextView
@@ -898,6 +919,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 - (void)setDocument:(OakDocument*)aDocument
 {
+	[self clearGhostText];
 	_definitionHighlightRange = ng::range_t();
 	_lspHoverCache = nil;
 
@@ -1363,6 +1385,12 @@ doScroll:
 	};
 
 	documentView->draw(ng::context_t(context, _showInvisibles ? documentView->invisibles_map : NULL_STR, [spellingDotImage CGImageForProposedRect:NULL context:[NSGraphicsContext currentContext] hints:nil], foldingDotsFactory), aRect, [self isFlipped], merge(documentView->ranges(), [self markedRanges]), _liveSearchRanges);
+
+	// Draw Copilot ghost text
+	if(_ghostText && _ghostTextCaret <= documentView->size())
+	{
+		[self drawGhostText:context inRect:aRect];
+	}
 
 	// Draw definition highlight underline when Cmd-hovering
 	if(!_definitionHighlightRange.empty() && _definitionHighlightRange.max().index <= documentView->size())
@@ -2364,6 +2392,10 @@ static void update_menu_key_equivalents (NSMenu* menu, std::multimap<std::string
 	[self cancelLSPHoverRequest];
 	[_lspHoverTooltip dismiss];
 
+	// Clear ghost text on any keystroke except Tab (Tab acceptance handled in insertTab:)
+	if(!([self hasGhostText] && [anEvent keyCode] == 48))
+		[self clearGhostText];
+
 	if([_lspCompletionPopup isVisible])
 	{
 		if([_lspCompletionPopup handleKeyEvent:anEvent])
@@ -3271,6 +3303,13 @@ static NSTouchBarItemIdentifier kOTVTouchBarItemIdentifierAddRemoveBookmark  = @
 
 - (void)insertTab:(id)sender
 {
+	// Ghost text always wins when visible (user sees the suggestion and expects Tab to accept it)
+	if([self hasGhostText])
+	{
+		[self acceptGhostText];
+		return;
+	}
+
 	AUTO_REFRESH;
 	if(![self expandTabTrigger:sender])
 	{
@@ -4563,6 +4602,8 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 - (void)mouseDown:(NSEvent*)anEvent
 {
+	[self clearGhostText];
+
 	if([self.inputContext handleEvent:anEvent] || !documentView || [anEvent type] != NSEventTypeLeftMouseDown || ignoreMouseDown)
 		return (void)(ignoreMouseDown = NO);
 
@@ -6043,6 +6084,12 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 	if(!documentView)
 		return;
 
+	// Cancel any pending ghost text to avoid racing with the explicit request
+	[_ghostTextTimer invalidate];
+	_ghostTextTimer = nil;
+	[self cancelCopilotGhostTextRequest];
+	[self clearGhostText];
+
 	OakDocument* doc = self.document;
 	if(!doc)
 		return;
@@ -6186,12 +6233,9 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 		ci.multiline = YES;
 		ci.originalItem = (NSDictionary*)item;
 
-		// Show full suggestion in doc panel for preview
-		NSFont* monoFont = [NSFont userFixedPitchFontOfSize:11];
-		ci.documentation = [[NSAttributedString alloc] initWithString:fullText attributes:@{
-			NSFontAttributeName: monoFont,
-			NSForegroundColorAttributeName: NSColor.labelColor,
-		}];
+		// Show full suggestion in doc panel with syntax highlighting
+		NSString* grammarScope = documentView ? to_ns(documentView->file_type()) : nil;
+		ci.documentation = [self syntaxHighlight:fullText withGrammar:grammarScope];
 		ci.isResolved = YES;
 		[completionItems addObject:ci];
 	}
@@ -6205,6 +6249,235 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 	CopilotManager* copilot = [CopilotManager sharedManager];
 	for(NSDictionary* item in items)
 		[copilot sendDidShowCompletion:item];
+}
+
+// ========================
+// = Copilot Ghost Text =
+// ========================
+
+- (void)drawGhostText:(CGContextRef)ctx inRect:(NSRect)aRect
+{
+	NSFont* font = self.font ?: [NSFont userFixedPitchFontOfSize:12];
+	CGFloat fontSize = font.pointSize * (documentView ? documentView->font_scale_factor() : 1.0);
+	NSFont* scaledFont = [NSFont fontWithDescriptor:font.fontDescriptor size:fontSize];
+
+	// Ghost text color: theme foreground at 40% opacity
+	NSColor* ghostColor;
+	if(self.theme)
+	{
+		auto styles = self.theme->styles_for_scope("comment");
+		CGColorRef fg = styles.foreground();
+		if(fg)
+			ghostColor = [[NSColor colorWithCGColor:fg] colorWithAlphaComponent:0.6];
+	}
+	if(!ghostColor)
+		ghostColor = [NSColor.secondaryLabelColor colorWithAlphaComponent:0.5];
+
+	NSDictionary* attrs = @{
+		NSFontAttributeName: scaledFont,
+		NSForegroundColorAttributeName: ghostColor,
+	};
+
+	CGRect caretRect = documentView->rect_at_index(ng::index_t(_ghostTextCaret));
+
+	NSArray<NSString*>* lines = [_ghostText componentsSeparatedByString:@"\n"];
+	CGFloat x = CGRectGetMinX(caretRect);
+	CGFloat y = CGRectGetMinY(caretRect);
+	CGFloat lineHeight = CGRectGetHeight(caretRect);
+
+	for(NSUInteger i = 0; i < lines.count; i++)
+	{
+		NSString* line = lines[i];
+		if(!line.length && i > 0)
+		{
+			y += lineHeight;
+			continue;
+		}
+
+		CGFloat drawX = (i == 0) ? x : CGRectGetMinX(caretRect);
+		// Only draw if the line intersects the dirty rect
+		if(y + lineHeight >= NSMinY(aRect) && y <= NSMaxY(aRect))
+		{
+			// For subsequent lines, align to column 0 + indentation of current line
+			if(i > 0)
+			{
+				text::pos_t caretPos = documentView->convert(_ghostTextCaret);
+				size_t bol = documentView->begin(caretPos.line);
+				CGRect bolRect = documentView->rect_at_index(ng::index_t(bol));
+				drawX = CGRectGetMinX(bolRect);
+			}
+
+			NSAttributedString* attrStr = [[NSAttributedString alloc] initWithString:line attributes:attrs];
+			CTLineRef ctLine = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)attrStr);
+
+			CGContextSaveGState(ctx);
+			// Flipped coordinates: translate and flip for CTLineDraw
+			CGContextSetTextMatrix(ctx, CGAffineTransformMakeScale(1.0, -1.0));
+			CGFloat baseline = y + scaledFont.ascender;
+			CGContextSetTextPosition(ctx, drawX, baseline);
+			CTLineDraw(ctLine, ctx);
+			CGContextRestoreGState(ctx);
+
+			CFRelease(ctLine);
+		}
+
+		y += lineHeight;
+	}
+}
+
+- (void)scheduleCopilotGhostText
+{
+	[self clearGhostText];
+
+	if(!documentView)
+		return;
+
+	CopilotManager* copilot = CopilotManager.sharedManager;
+	if(copilot.status != CopilotStatusReady)
+		return;
+
+	if([_lspCompletionPopup isVisible])
+		return;
+
+	__weak OakTextView* weakSelf = self;
+	_ghostTextTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+	                                                 repeats:NO
+	                                                   block:^(NSTimer* t) {
+		[weakSelf requestCopilotGhostText];
+	}];
+}
+
+- (void)requestCopilotGhostText
+{
+	if(!documentView)
+		return;
+
+	[self cancelCopilotGhostTextRequest];
+
+	CopilotManager* copilot = CopilotManager.sharedManager;
+	if(copilot.status != CopilotStatusReady)
+		return;
+
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	__weak OakTextView* weakSelf = self;
+	size_t requestCaret = caret;
+	_ghostTextRequestId = [copilot requestCompletionForDocument:doc
+	                                                       line:pos.line
+	                                                  character:pos.column
+	                                                 completion:^(NSArray<NSDictionary*>* items) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !strongSelf->documentView)
+			return;
+
+		size_t currentCaret = strongSelf->documentView->ranges().last().last.index;
+		if(currentCaret != requestCaret)
+			return;
+
+		if(!items || items.count == 0)
+			return;
+
+		BOOL suppressPopup = [[NSUserDefaults standardUserDefaults] boolForKey:@"CopilotSuppressAutoPopup"];
+		if(items.count == 1 || suppressPopup)
+			[strongSelf showGhostText:items[0]];
+		else
+			[strongSelf showCopilotCompletionPopup:items cursorCharacter:pos.column];
+	}];
+}
+
+- (void)cancelCopilotGhostTextRequest
+{
+	if(_ghostTextRequestId)
+	{
+		[[CopilotManager sharedManager] cancelCompletionRequest:_ghostTextRequestId];
+		_ghostTextRequestId = 0;
+	}
+}
+
+- (void)showGhostText:(NSDictionary*)item
+{
+	NSString* insertText = item[@"insertText"] ?: item[@"text"] ?: item[@"displayText"];
+	if(!insertText.length)
+		return;
+
+	NSDictionary* range = item[@"range"];
+	if(range)
+	{
+		size_t caret = documentView->ranges().last().last.index;
+		text::pos_t caretPos = documentView->convert(caret);
+		NSUInteger rangeStartChar = [range[@"start"][@"character"] unsignedIntegerValue];
+		NSUInteger prefixLen = caretPos.column - rangeStartChar;
+		if(prefixLen > 0 && prefixLen < insertText.length)
+			insertText = [insertText substringFromIndex:prefixLen];
+	}
+
+	_ghostText = insertText;
+	_ghostTextItem = item;
+	_ghostTextCaret = documentView->ranges().last().last.index;
+
+	[[CopilotManager sharedManager] sendDidShowCompletion:item];
+
+	[self setNeedsDisplay:YES];
+}
+
+- (void)clearGhostText
+{
+	if(!_ghostText)
+		return;
+
+	_ghostText = nil;
+	_ghostTextItem = nil;
+	_ghostTextCaret = 0;
+	[_ghostTextTimer invalidate];
+	_ghostTextTimer = nil;
+	_ghostTextRequestId = 0;
+
+	[self setNeedsDisplay:YES];
+}
+
+- (BOOL)hasGhostText
+{
+	return _ghostText != nil;
+}
+
+- (void)acceptGhostText
+{
+	if(!_ghostText || !documentView)
+		return;
+
+	AUTO_REFRESH;
+
+	NSDictionary* item = _ghostTextItem;
+	NSString* fullInsertText = item[@"insertText"] ?: item[@"text"] ?: item[@"displayText"];
+	NSDictionary* range = item[@"range"];
+
+	if(range && fullInsertText)
+	{
+		int startLine = [range[@"start"][@"line"] intValue];
+		int startChar = [range[@"start"][@"character"] intValue];
+		int endLine   = [range[@"end"][@"line"] intValue];
+		int endChar   = [range[@"end"][@"character"] intValue];
+
+		size_t from = documentView->convert(text::pos_t(startLine, startChar));
+		size_t to   = documentView->convert(text::pos_t(endLine, endChar));
+		documentView->set_ranges(ng::range_t(from, to));
+		documentView->insert(to_s(fullInsertText));
+	}
+	else
+	{
+		documentView->insert(to_s(_ghostText));
+	}
+
+	[[CopilotManager sharedManager] sendAcceptanceTelemetry:item];
+
+	_ghostText = nil;
+	_ghostTextItem = nil;
+	_ghostTextCaret = 0;
 }
 
 - (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen autoInsertSingle:(BOOL)autoInsertSingle
@@ -6564,25 +6837,23 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 				NSMutableAttributedString* combined = [[NSMutableAttributedString alloc] init];
 				NSString* text = rawDocumentation;
 
-				// Extract code blocks (```lang\n...\n```) as monospaced signature
-				static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(?:\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
+				// Extract code blocks (```lang\n...\n```) as syntax-highlighted signature
+				static NSRegularExpression* codeBlockRegex = [NSRegularExpression regularExpressionWithPattern:@"```(\\w+)?\\n([\\s\\S]*?)\\n```" options:0 error:nil];
 				NSArray* codeMatches = [codeBlockRegex matchesInString:text options:0 range:NSMakeRange(0, text.length)];
 
 				NSString* bodyText = text;
 				if(codeMatches.count > 0)
 				{
 					NSTextCheckingResult* firstMatch = codeMatches[0];
-					NSString* signature = [text substringWithRange:[firstMatch rangeAtIndex:1]];
+					NSString* signature = [text substringWithRange:[firstMatch rangeAtIndex:2]];
 					signature = [signature stringByReplacingOccurrencesOfString:@"<?php\n" withString:@""];
 					signature = [signature stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
 					if(signature.length > 0)
 					{
-						NSDictionary* monoAttrs = @{
-							NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
-							NSForegroundColorAttributeName: [NSColor labelColor]
-						};
-						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:signature attributes:monoAttrs]];
+						NSString* grammarScope = documentView ? to_ns(documentView->file_type()) : nil;
+						NSMutableAttributedString* styledSignature = [strongSelf syntaxHighlight:signature withGrammar:grammarScope];
+						[combined appendAttributedString:styledSignature];
 					}
 
 					NSMutableString* remaining = [text mutableCopy];
@@ -6596,7 +6867,17 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 				{
 					if(combined.length > 0)
 						[combined appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n\n" attributes:@{}]];
-					[combined appendAttributedString:[strongSelf parseMarkdownToAttributedString:bodyText]];
+
+					if(codeMatches.count == 0)
+					{
+						// No code blocks — treat entire content as code (e.g. Copilot completions)
+						NSString* grammarScope = documentView ? to_ns(documentView->file_type()) : nil;
+						[combined appendAttributedString:[strongSelf syntaxHighlight:bodyText withGrammar:grammarScope]];
+					}
+					else
+					{
+						[combined appendAttributedString:[strongSelf parseMarkdownToAttributedString:bodyText]];
+					}
 				}
 
 				if(combined.length > 0)
@@ -6815,6 +7096,92 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 	NSRect viewRect = NSRectFromCGRect(wordRect);
 	
 	[self showLSPHoverTooltip:content atRect:viewRect];
+}
+
+- (NSMutableAttributedString*)syntaxHighlight:(NSString*)code withGrammar:(NSString*)grammarScope
+{
+	if(!grammarScope || code.length == 0)
+	{
+		NSDictionary* attrs = @{
+			NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
+			NSForegroundColorAttributeName: [NSColor labelColor]
+		};
+		return [[NSMutableAttributedString alloc] initWithString:code ?: @"" attributes:attrs];
+	}
+
+	// Load grammar
+	parse::grammar_ptr grammar;
+	for(auto const& bundleItem : bundles::query(bundles::kFieldGrammarScope, to_s(grammarScope), scope::wildcard, bundles::kItemTypeGrammar))
+	{
+		if((grammar = parse::parse_grammar(bundleItem)))
+			break;
+	}
+
+	// Load the editor's theme
+	OakTheme* theme = nil;
+	if(bundles::item_ptr const& themeItem = bundles::lookup(to_s(_themeUUID)))
+		theme = [[OakTheme alloc] initWithBundleItem:themeItem];
+
+	// Prepend <?php for PHP-family grammars that need it to enter PHP mode
+	BOOL isPhp = [grammarScope isEqualToString:@"text.html.php"];
+	static NSString* const phpPrefix = @"<?php\n";
+	NSString* parseCode = (isPhp && ![code hasPrefix:@"<?"]) ? [phpPrefix stringByAppendingString:code] : code;
+	NSUInteger prefixLen = (parseCode != code) ? phpPrefix.length : 0;
+
+	NSDictionary* baseAttrs = @{
+		NSFontAttributeName: [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightMedium],
+		NSForegroundColorAttributeName: theme.foregroundColor ?: [NSColor labelColor]
+	};
+	NSMutableAttributedString* styled = [[NSMutableAttributedString alloc] initWithString:parseCode attributes:baseAttrs];
+
+	if(grammar && theme)
+	{
+		// Parse line by line, carrying parser state forward (same as the editor)
+		std::string str = to_s(parseCode);
+		std::map<size_t, scope::scope_t> allScopes;
+		parse::stack_ptr parserState = grammar->seed();
+
+		for(std::string::size_type i = 0; i != str.size(); )
+		{
+			auto eol = str.find('\n', i);
+			eol = eol != std::string::npos ? ++eol : str.size();
+
+			std::string line = str.substr(i, eol - i);
+			std::map<size_t, scope::scope_t> lineScopes;
+			parserState = parse::parse(line.data(), line.data() + line.size(), parserState, lineScopes, i == 0);
+
+			for(auto const& pair : lineScopes)
+				allScopes[i + pair.first] = pair.second;
+
+			i = eol;
+		}
+
+		// Apply theme styles for each scope region
+		size_t from = 0, pos = 0;
+		for(auto pair = allScopes.begin(); pair != allScopes.end(); )
+		{
+			OakThemeStyles* styles = [theme stylesForScope:pair->second];
+			size_t to = ++pair != allScopes.end() ? pair->first : str.size();
+			size_t len = utf16::distance(str.data() + from, str.data() + to);
+
+			NSMutableDictionary* attrs = [NSMutableDictionary dictionary];
+			attrs[NSForegroundColorAttributeName] = styles.foregroundColor;
+			if(![styles.backgroundColor isEqual:theme.backgroundColor])
+				attrs[NSBackgroundColorAttributeName] = styles.backgroundColor;
+			if(styles.fontTraits)
+				[styled applyFontTraits:styles.fontTraits range:NSMakeRange(pos, len)];
+			[styled addAttributes:attrs range:NSMakeRange(pos, len)];
+
+			pos += len;
+			from = to;
+		}
+	}
+
+	// Strip the <?php\n prefix we added for parsing
+	if(prefixLen > 0)
+		[styled deleteCharactersInRange:NSMakeRange(0, prefixLen)];
+
+	return styled;
 }
 
 - (NSAttributedString*)parseMarkdownToAttributedString:(NSString*)markdown
