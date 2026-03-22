@@ -36,6 +36,10 @@
 #import <oak/oak.h>
 #import <scm/scm.h>
 #import <text/types.h>
+#import <kvdb/kvdb.h>
+#if HAVE_OAK_SWIFTUI
+#import "OakSwiftUI-Swift.h"
+#endif
 
 void OakOpenDocuments (NSArray* paths, BOOL treatFilePackageAsFolder)
 {
@@ -298,6 +302,8 @@ BOOL HasDocumentWindow (NSArray* windows)
 		},
 		{ @"Navigate",
 			.submenu = {
+				{ @"Command Palette…", @selector(showCommandPalette:), @"P", .modifierFlags = NSEventModifierFlagCommand|NSEventModifierFlagShift },
+				{ /* -------- */ },
 				{ @"Jump to Line…",              @selector(orderFrontGoToLinePanel:),      @"l" },
 				{ @"Jump to Symbol…",            @selector(showSymbolChooser:),            @"T" },
 				{ @"Jump to Selection",          @selector(centerSelectionInVisibleArea:), @"j" },
@@ -841,6 +847,173 @@ BOOL HasDocumentWindow (NSArray* windows)
 {
 	[BundleEditor.sharedInstance revealBundleItem:bundles::lookup(to_s(uuidString))];
 }
+
+// ========================
+// = Command Palette      =
+// ========================
+
+#if HAVE_OAK_SWIFTUI
+static OakCommandPalette* sharedCommandPalette;
+static OakThemeEnvironment* sharedThemeEnvironment;
+
+static NSString* formattedKeyEquivalent (NSMenuItem* item)
+{
+	NSString* key = item.keyEquivalent;
+	if(key.length == 0)
+		return @"";
+
+	NSMutableString* result = [NSMutableString string];
+	NSEventModifierFlags flags = item.keyEquivalentModifierMask;
+	if(flags & NSEventModifierFlagControl)  [result appendString:@"\u2303"];
+	if(flags & NSEventModifierFlagOption)   [result appendString:@"\u2325"];
+	if(flags & NSEventModifierFlagShift)    [result appendString:@"\u21E7"];
+	if(flags & NSEventModifierFlagCommand)  [result appendString:@"\u2318"];
+	[result appendString:key.uppercaseString];
+	return result;
+}
+
+- (void)collectMenuItems:(NSMenu*)menu path:(NSString*)path into:(NSMutableArray<OakCommandPaletteItem*>*)result bundleUUIDs:(NSMutableSet<NSString*>*)uuids
+{
+	for(NSMenuItem* item in menu.itemArray)
+	{
+		if(item.isSeparatorItem || item.isHidden || item.title.length == 0)
+			continue;
+
+		NSString* itemPath = path.length
+			? [NSString stringWithFormat:@"%@ \u203A %@", path, item.title]
+			: item.title;
+
+		if(item.hasSubmenu)
+		{
+			[self collectMenuItems:item.submenu path:itemPath into:result bundleUUIDs:uuids];
+		}
+		else if(item.action)
+		{
+			OakCommandPaletteItem* paletteItem = [[OakCommandPaletteItem alloc]
+				initWithTitle:item.title
+				     subtitle:path
+				keyEquivalent:formattedKeyEquivalent(item)
+				     category:OakCommandPaletteCategoryMenuAction
+			     actionIdentifier:[NSString stringWithFormat:@"menu:%@", NSStringFromSelector(item.action)]];
+			paletteItem.sourceMenuItem = item;
+			paletteItem.enabled = item.isEnabled;
+			[result addObject:paletteItem];
+
+			if(item.representedObject && [item.representedObject isKindOfClass:[NSString class]])
+				[uuids addObject:item.representedObject];
+		}
+	}
+}
+
+- (NSArray<OakCommandPaletteItem*>*)recentProjectsForCommandPalette
+{
+	NSMutableArray* result = [NSMutableArray array];
+	NSString* appSupport = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingPathComponent:@"TextMate"];
+	KVDB* db = [KVDB sharedDBUsingFile:@"RecentProjects.db" inDirectory:appSupport];
+
+	for(NSDictionary* pair in db.allObjects)
+	{
+		NSString* path = pair[@"key"];
+		if(!path || ![NSFileManager.defaultManager fileExistsAtPath:path])
+			continue;
+
+		OakCommandPaletteItem* item = [[OakCommandPaletteItem alloc]
+			initWithTitle:path.lastPathComponent
+			     subtitle:[path stringByAbbreviatingWithTildeInPath]
+			keyEquivalent:@""
+			     category:OakCommandPaletteCategoryRecentProject
+		     actionIdentifier:[NSString stringWithFormat:@"project:%@", path]];
+		item.icon = [NSWorkspace.sharedWorkspace iconForFile:path];
+		[result addObject:item];
+	}
+	return result;
+}
+#endif
+
+- (IBAction)showCommandPalette:(id)sender
+{
+#if HAVE_OAK_SWIFTUI
+	NSWindow* keyWindow = NSApp.keyWindow;
+	if(!keyWindow)
+		return;
+
+	if(!sharedThemeEnvironment)
+		sharedThemeEnvironment = [[OakThemeEnvironment alloc] init];
+
+	if(!sharedCommandPalette)
+	{
+		sharedCommandPalette = [[OakCommandPalette alloc] initWithTheme:sharedThemeEnvironment];
+		sharedCommandPalette.delegate = (id<OakCommandPaletteDelegate>)self;
+	}
+
+	NSMutableArray<OakCommandPaletteItem*>* items = [NSMutableArray array];
+	NSMutableSet<NSString*>* bundleUUIDs = [NSMutableSet set];
+	[self collectMenuItems:NSApp.mainMenu path:@"" into:items bundleUUIDs:bundleUUIDs];
+	[items addObjectsFromArray:[self recentProjectsForCommandPalette]];
+
+	[sharedCommandPalette showIn:keyWindow items:items];
+#endif
+}
+
+#if HAVE_OAK_SWIFTUI
+- (void)commandPaletteDidSelectItem:(OakCommandPaletteItem*)item
+{
+	switch(item.category)
+	{
+		case OakCommandPaletteCategoryMenuAction:
+		{
+			NSMenuItem* menuItem = item.sourceMenuItem;
+			if(menuItem && menuItem.action)
+				[NSApp sendAction:menuItem.action to:menuItem.target from:self];
+			break;
+		}
+		case OakCommandPaletteCategoryBundleCommand:
+		{
+			NSString* uuid = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"bundle:" withString:@""];
+			[NSApp sendAction:@selector(performBundleItemWithUUIDStringFrom:) to:nil from:@{ @"representedObject": uuid }];
+			break;
+		}
+		case OakCommandPaletteCategoryRecentProject:
+		{
+			NSString* path = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"project:" withString:@""];
+			OakOpenDocuments(@[path]);
+			break;
+		}
+		case OakCommandPaletteCategoryGoToLine:
+		{
+			NSString* lineStr = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"line:" withString:@""];
+			NSInteger lineNumber = lineStr.integerValue;
+			if(lineNumber > 0)
+			{
+				NSString* selStr = [NSString stringWithFormat:@"%ld", (long)lineNumber];
+				id target = [NSApp targetForAction:@selector(setSelectionString:)];
+				if([target respondsToSelector:@selector(setSelectionString:)])
+					[target performSelector:@selector(setSelectionString:) withObject:selStr];
+			}
+			break;
+		}
+		case OakCommandPaletteCategoryFindInProject:
+		{
+			NSString* query = [item.actionIdentifier stringByReplacingOccurrencesOfString:@"find:" withString:@""];
+			[[NSPasteboard pasteboardWithName:NSPasteboardNameFind] clearContents];
+			[[NSPasteboard pasteboardWithName:NSPasteboardNameFind] setString:query forType:NSPasteboardTypeString];
+			[self orderFrontFindPanel:self];
+			break;
+		}
+		default:
+			break;
+	}
+}
+
+- (void)commandPaletteDidDismiss
+{
+}
+
+- (NSArray<OakCommandPaletteItem*>*)commandPaletteRequestItemsForMode:(NSInteger)mode
+{
+	return @[];
+}
+#endif
 
 // ============
 // = Printing =

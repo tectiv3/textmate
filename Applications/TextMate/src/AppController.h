@@ -23,6 +23,7 @@
 - (IBAction)performGoToLine:(id)sender;
 
 - (IBAction)showBundleItemChooser:(id)sender;
+- (IBAction)showCommandPalette:(id)sender;
 
 - (IBAction)showPreferences:(id)sender;
 - (IBAction)showBundleEditor:(id)sender;
