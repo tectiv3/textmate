@@ -1,11 +1,16 @@
 import AppKit
 import Combine
 
+public enum DocPanelPosition {
+	case right, below, above
+}
+
 @MainActor
 public class CompletionViewModel: ObservableObject {
 	@Published public private(set) var filteredItems: [OakCompletionItem] = []
 	@Published public var selectedIndex: Int = 0
 	@Published public private(set) var resolvedDocumentation: NSAttributedString?
+	@Published public var docPanelPosition: DocPanelPosition = .right
 
 	private var allItems: [OakCompletionItem] = []
 	private var currentFilter: String = ""

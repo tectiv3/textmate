@@ -252,6 +252,26 @@ NSNotificationName const CopilotLogNotification             = @"CopilotLogNotifi
 	return nil;
 }
 
+- (void)lspClient:(LSPClient*)client didReceiveNotification:(NSString*)method params:(NSDictionary*)params
+{
+	if([method isEqualToString:@"statusNotification"])
+	{
+		NSString* status = params[@"status"] ?: params[@"kind"];
+		[self log:[NSString stringWithFormat:@"Status notification: %@", status]];
+
+		if([status isEqualToString:@"Normal"])
+		{
+			if(_status != CopilotStatusReady)
+				[self checkAuthStatus];
+		}
+		else if([status isEqualToString:@"Error"])
+		{
+			_status = CopilotStatusError;
+			[NSNotificationCenter.defaultCenter postNotificationName:CopilotStatusDidChangeNotification object:self];
+		}
+	}
+}
+
 // MARK: - Authentication
 
 - (void)checkAuthStatus

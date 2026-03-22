@@ -11,6 +11,7 @@ import AppKit
 	@objc public var documentation: NSAttributedString?
 	@objc public var originalItem: NSDictionary?
 	@objc public var isResolved: Bool = false
+	@objc public var multiline: Bool = false
 
 	@objc public var effectiveInsertText: String {
 		insertText ?? label

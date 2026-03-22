@@ -6183,6 +6183,7 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 		                                                      insertText:fullText
 		                                                          detail:detail
 		                                                            kind:15];
+		ci.multiline = YES;
 		ci.originalItem = (NSDictionary*)item;
 
 		// Show full suggestion in doc panel for preview

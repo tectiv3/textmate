@@ -12,6 +12,7 @@
 - (void)lspClient:(LSPClient*)client didReceiveApplyEditRequest:(NSDictionary*)workspaceEdit requestId:(int)requestId;
 - (void)lspClientDidInitialize:(LSPClient*)client;
 - (id)lspClient:(LSPClient*)client handleServerRequest:(NSString*)method params:(NSDictionary*)params;
+- (void)lspClient:(LSPClient*)client didReceiveNotification:(NSString*)method params:(NSDictionary*)params;
 @end
 
 extern NSString* const LSPLogNotification;

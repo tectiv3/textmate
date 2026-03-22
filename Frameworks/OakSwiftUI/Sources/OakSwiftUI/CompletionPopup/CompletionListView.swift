@@ -5,15 +5,39 @@ struct CompletionListView: View {
 	let showDocPanel: Bool
 	@EnvironmentObject var theme: OakThemeEnvironment
 
+	private var isVerticalDocLayout: Bool {
+		viewModel.docPanelPosition == .below || viewModel.docPanelPosition == .above
+	}
+
 	var body: some View {
-		HStack(spacing: 0) {
-			itemsList
-			if showDocPanel {
-				Divider()
-				docPanel
+		Group {
+			if !showDocPanel || viewModel.docPanelPosition == .right {
+				HStack(spacing: 0) {
+					itemsList
+					if showDocPanel {
+						Divider()
+						docPanel
+					}
+				}
+			} else if viewModel.docPanelPosition == .above {
+				VStack(spacing: 0) {
+					docPanel
+					Divider()
+					itemsList
+				}
+			} else {
+				VStack(spacing: 0) {
+					itemsList
+					Divider()
+					docPanel
+				}
 			}
 		}
-		.background(.ultraThinMaterial)
+		.background {
+			Color(nsColor: theme.backgroundColor)
+				.opacity(0.75)
+				.background(.ultraThinMaterial)
+		}
 		.clipShape(RoundedRectangle(cornerRadius: 6))
 	}
 
@@ -49,9 +73,9 @@ struct CompletionListView: View {
 	private var docPanel: some View {
 		Group {
 			if let docs = viewModel.resolvedDocumentation, docs.length > 0 {
-				DocDetailView(documentation: docs)
+				DocDetailView(documentation: docs, isVerticalLayout: isVerticalDocLayout)
 					.transition(.opacity)
-			} else {
+			} else if !isVerticalDocLayout {
 				Color.clear
 					.frame(width: 260)
 			}

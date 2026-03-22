@@ -28,7 +28,8 @@ struct CompletionRowView: View {
 			Text(item.label)
 				.font(.system(size: theme.fontSize, design: .monospaced))
 				.foregroundStyle(isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
-				.lineLimit(1)
+				.lineLimit(item.multiline ? 3 : 1)
+				.fixedSize(horizontal: false, vertical: item.multiline)
 
 			Spacer(minLength: 4)
 

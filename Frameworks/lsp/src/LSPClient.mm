@@ -439,6 +439,11 @@ static NSString* fileFromParams (json const& params)
 		else
 		{
 			[self postLog:[NSString stringWithFormat:@"%s", method.c_str()] source:@"event"];
+			if([_delegate respondsToSelector:@selector(lspClient:didReceiveNotification:params:)])
+			{
+				NSDictionary* params = msg.contains("params") ? [self convertJSON:msg["params"]] : @{};
+				[_delegate lspClient:self didReceiveNotification:to_ns(method) params:params];
+			}
 		}
 	}
 	else if(msg.contains("id"))

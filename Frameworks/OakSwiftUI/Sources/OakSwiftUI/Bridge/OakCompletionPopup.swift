@@ -10,6 +10,7 @@ import Combine
 	private var viewModel: CompletionViewModel?
 	private let theme: OakThemeEnvironment
 	private static let docPanelWidth: CGFloat = 262
+	private static let verticalDocHeight: CGFloat = 200
 	private var cancellables = Set<AnyCancellable>()
 	private var listHeight: CGFloat = 0
 
@@ -35,33 +36,51 @@ import Combine
 		}
 		self.viewModel = vm
 
-		let listView = CompletionListView(viewModel: vm, showDocPanel: supportsResolve)
-			.environmentObject(theme)
-
-		let hostingView = NSHostingView(rootView: listView)
-
 		let rowHeight = max(theme.fontSize * 1.8, 22)
-		let itemCount = min(items.count, 12)
-		let height = CGFloat(itemCount) * rowHeight + 8
-		self.listHeight = height
+		let hasMultiline = items.contains { $0.multiline }
+		let maxVisible = hasMultiline ? 6 : 12
+		let computedListHeight = computeListHeight(items: items, rowHeight: rowHeight, maxVisible: maxVisible)
+		self.listHeight = computedListHeight
+
 		let detailFont = NSFont.systemFont(ofSize: max(theme.fontSize - 2, 9))
 		let maxLabelWidth = items.prefix(50).map { ($0.label as NSString).size(withAttributes: [.font: theme.font]).width }.max() ?? 200
 		let maxDetailWidth = items.prefix(50).map { ($0.detail as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0
-		var width = min(max(maxLabelWidth + maxDetailWidth + 60, 280), 650)
-		if supportsResolve {
-			width += Self.docPanelWidth
-		}
+		let listWidth = min(max(maxLabelWidth + maxDetailWidth + 60, 280), 650)
 
 		let screenPoint = parentView.window?.convertPoint(toScreen:
 			parentView.convert(point, to: nil)) ?? point
+		let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
-		var origin = NSPoint(x: screenPoint.x, y: screenPoint.y - height)
-		if let screen = NSScreen.main, origin.y < screen.visibleFrame.minY {
+		var width = listWidth
+		if supportsResolve {
+			let horizontalWidth = listWidth + Self.docPanelWidth
+			if horizontalWidth <= screen.maxX - screenPoint.x {
+				vm.docPanelPosition = .right
+				width = horizontalWidth
+			} else {
+				// Not enough horizontal space — stack doc panel vertically
+				let spaceBelow = screenPoint.y - screen.minY
+				let spaceAbove = screen.maxY - (screenPoint.y + 20)
+				vm.docPanelPosition = spaceAbove >= spaceBelow ? .above : .below
+			}
+		}
+
+		var totalHeight = computedListHeight
+		if supportsResolve && vm.docPanelPosition != .right {
+			totalHeight += Self.verticalDocHeight
+		}
+
+		var origin = NSPoint(x: screenPoint.x, y: screenPoint.y - totalHeight)
+		if origin.y < screen.minY {
 			origin.y = screenPoint.y + 20
 		}
 
+		let listView = CompletionListView(viewModel: vm, showDocPanel: supportsResolve)
+			.environmentObject(theme)
+		let hostingView = NSHostingView(rootView: listView)
+
 		let panel = NSPanel(
-			contentRect: NSRect(origin: origin, size: NSSize(width: width, height: height)),
+			contentRect: NSRect(origin: origin, size: NSSize(width: width, height: totalHeight)),
 			styleMask: [.borderless, .nonactivatingPanel],
 			backing: .buffered,
 			defer: false
@@ -98,14 +117,32 @@ import Combine
 		viewModel?.resolveCompleted(for: item, documentation: documentation)
 	}
 
+	private func computeListHeight(items: [OakCompletionItem], rowHeight: CGFloat, maxVisible: Int) -> CGFloat {
+		let multilineRowHeight = rowHeight * 3
+		var total: CGFloat = 8 // vertical padding
+		for item in items.prefix(maxVisible) {
+			total += item.multiline ? multilineRowHeight : rowHeight
+		}
+		return total
+	}
+
 	private func resizePanelToFit() {
 		guard let w = window, let vm = viewModel else { return }
 		let rowHeight = max(theme.fontSize * 1.8, 22)
-		let itemCount = min(vm.filteredItems.count, 12)
-		let newListHeight = CGFloat(itemCount) * rowHeight + 8
+		let hasMultiline = vm.filteredItems.contains { $0.multiline }
+		let maxVisible = hasMultiline ? 6 : 12
+		let newListHeight = computeListHeight(items: Array(vm.filteredItems), rowHeight: rowHeight, maxVisible: maxVisible)
 		self.listHeight = newListHeight
 
-		let targetHeight = supportsResolve ? heightForDocs(listHeight: newListHeight) : newListHeight
+		let targetHeight: CGFloat
+		if supportsResolve && vm.docPanelPosition != .right {
+			targetHeight = newListHeight + Self.verticalDocHeight
+		} else if supportsResolve {
+			targetHeight = heightForHorizontalDocs(listHeight: newListHeight)
+		} else {
+			targetHeight = newListHeight
+		}
+
 		var frame = w.frame
 		let delta = targetHeight - frame.height
 		frame.origin.y -= delta
@@ -114,8 +151,15 @@ import Combine
 	}
 
 	private func resizeForDocs() {
-		guard let w = window else { return }
-		let targetHeight = heightForDocs(listHeight: listHeight)
+		guard let w = window, let vm = viewModel else { return }
+
+		let targetHeight: CGFloat
+		if vm.docPanelPosition != .right {
+			targetHeight = listHeight + Self.verticalDocHeight
+		} else {
+			targetHeight = heightForHorizontalDocs(listHeight: listHeight)
+		}
+
 		var frame = w.frame
 		let delta = targetHeight - frame.height
 		guard abs(delta) > 1 else { return }
@@ -124,18 +168,18 @@ import Combine
 		w.setFrame(frame, display: true, animate: false)
 	}
 
-	private func heightForDocs(listHeight: CGFloat) -> CGFloat {
+	private func heightForHorizontalDocs(listHeight: CGFloat) -> CGFloat {
 		guard let vm = viewModel, let docs = vm.resolvedDocumentation, docs.length > 0 else {
 			return listHeight
 		}
 
 		let maxScreenHeight = (NSScreen.main?.visibleFrame.height ?? 800) * 0.4
-		let docWidth = Self.docPanelWidth - 20 // padding
+		let docWidth = Self.docPanelWidth - 20
 		let boundingRect = docs.boundingRect(
 			with: NSSize(width: docWidth, height: .greatestFiniteMagnitude),
 			options: [.usesLineFragmentOrigin, .usesFontLeading]
 		)
-		let docHeight = ceil(boundingRect.height) + 30 // padding + divider
+		let docHeight = ceil(boundingRect.height) + 30
 
 		return min(max(listHeight, docHeight), maxScreenHeight)
 	}
