@@ -33,11 +33,7 @@ struct CompletionListView: View {
 				}
 			}
 		}
-		.background {
-			Color(nsColor: theme.backgroundColor)
-				.opacity(0.75)
-				.background(.ultraThinMaterial)
-		}
+		.background(Color(nsColor: theme.backgroundColor).opacity(0.85))
 		.clipShape(RoundedRectangle(cornerRadius: 6))
 	}
 

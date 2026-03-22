@@ -11,11 +11,7 @@ struct CommandPaletteView: View {
 			Divider()
 			resultsList
 		}
-		.background {
-			Color(nsColor: theme.backgroundColor)
-				.opacity(0.75)
-				.background(.ultraThinMaterial)
-		}
+		.background(Color(nsColor: theme.backgroundColor).opacity(0.85))
 		.clipShape(RoundedRectangle(cornerRadius: 6))
 		.onKeyPress(.downArrow) { viewModel.selectNext(); return .handled }
 		.onKeyPress(.upArrow) { viewModel.selectPrevious(); return .handled }
