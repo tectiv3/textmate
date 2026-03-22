@@ -16,6 +16,36 @@ Before you submit a bug report please read the [writing bug reports](https://git
 
 ![textmate](https://raw.github.com/textmate/textmate/gh-pages/images/screenshot.png)
 
+## Screenshots
+
+### Command Palette
+
+<p align="center">
+  <img src="docs/screenshots/command-palette/recent-projects.png" width="320" alt="Recent Projects">
+  <img src="docs/screenshots/command-palette/commands.png" width="320" alt="Commands">
+</p>
+<p align="center">
+  <img src="docs/screenshots/command-palette/symbols.png" width="320" alt="Symbols">
+  <img src="docs/screenshots/command-palette/bundles.png" width="320" alt="Bundle Editor Items">
+</p>
+<p align="center">
+  <img src="docs/screenshots/command-palette/find-in-document.png" width="320" alt="Find in Document">
+  <img src="docs/screenshots/command-palette/settings.png" width="320" alt="Settings">
+</p>
+
+### LSP
+
+<p align="center">
+  <img src="docs/screenshots/lsp/completion-docs.jpg" width="480" alt="Completion with Documentation">
+</p>
+<p align="center">
+  <img src="docs/screenshots/lsp/hover.jpg" width="400" alt="Hover Information">
+  <img src="docs/screenshots/lsp/code-actions.png" width="280" alt="Code Actions">
+</p>
+<p align="center">
+  <img src="docs/screenshots/lsp/lsp-status.png" width="200" alt="LSP Status Bar">
+</p>
+
 # Building
 
 ## Setup
