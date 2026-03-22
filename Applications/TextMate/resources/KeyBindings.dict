@@ -48,6 +48,8 @@
 
 	"~$\t"     = "shiftLeft:";
 	"~\t"      = "lspComplete:";
+	"~\033"    = "lspCopilotComplete:";
+	"^\033"    = "lspShowHoverInfo:";
 	"@D"       = "lspGoToDefinition:";
 	"~@["      = "indent:";
 

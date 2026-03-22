@@ -47,6 +47,7 @@
 #import <editor/write.h>
 #import <lsp/LSPManager.h>
 #import <lsp/LSPClient.h>
+#import <lsp/CopilotManager.h>
 #import <io/exec.h>
 #import <Find/Find.h>
 
@@ -549,6 +550,9 @@ private:
 
 	// = LSP Code Actions =
 	BOOL _didApplyCodeActionEdit;
+
+	// = Copilot =
+	BOOL _copilotCompletionActive;
 
 	// =================
 	// = Accessibility =
@@ -6031,11 +6035,101 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 		}];
 }
 
-- (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen autoInsertSingle:(BOOL)autoInsertSingle
+// = Copilot Completion =
+// ======================
+
+- (void)lspCopilotComplete:(id)sender
 {
 	if(!documentView)
 		return;
 
+	OakDocument* doc = self.document;
+	if(!doc)
+		return;
+
+	CopilotManager* copilot = CopilotManager.sharedManager;
+	switch(copilot.status)
+	{
+		case CopilotStatusAuthRequired:
+			[copilot signIn];
+			return;
+		case CopilotStatusDisabled:
+			[OakNotificationManager.shared showWithMessage:@"Copilot: Server not found" type:2];
+			return;
+		case CopilotStatusReady:
+			break;
+		default:
+			[OakNotificationManager.shared showWithMessage:@"Copilot: Not ready" type:3];
+			return;
+	}
+
+	size_t caret = documentView->ranges().last().last.index;
+	text::pos_t pos = documentView->convert(caret);
+
+	NSLog(@"[Copilot] lspCopilotComplete: triggered at %lu:%lu", (unsigned long)pos.line, (unsigned long)pos.column);
+
+	__weak OakTextView* weakSelf = self;
+	NSUInteger cursorChar = pos.column;
+	[copilot requestCompletionForDocument:doc line:pos.line character:cursorChar completion:^(NSArray<NSDictionary*>* items) {
+		OakTextView* strongSelf = weakSelf;
+		if(!strongSelf || !strongSelf->documentView)
+			return;
+
+		NSLog(@"[Copilot] Completion callback: %lu items", (unsigned long)items.count);
+
+		if(!items || items.count == 0)
+		{
+			[OakNotificationManager.shared showWithMessage:@"Copilot: No suggestions" type:3];
+			return;
+		}
+
+		if(items.count == 1)
+			[strongSelf insertCopilotCompletion:items[0]];
+		else
+			[strongSelf showCopilotCompletionPopup:items cursorCharacter:cursorChar];
+	}];
+}
+
+- (void)insertCopilotCompletion:(NSDictionary*)item
+{
+	AUTO_REFRESH;
+
+	NSString* insertText = item[@"insertText"] ?: item[@"text"] ?: item[@"displayText"];
+	if(!insertText.length)
+		return;
+
+	NSDictionary* range = item[@"range"];
+	NSLog(@"[Copilot] Inserting completion: %lu chars, range: %@, text: '%.80s…'",
+		(unsigned long)insertText.length, range, insertText.UTF8String);
+
+	if(range)
+	{
+		int startLine = [range[@"start"][@"line"] intValue];
+		int startChar = [range[@"start"][@"character"] intValue];
+		int endLine   = [range[@"end"][@"line"] intValue];
+		int endChar   = [range[@"end"][@"character"] intValue];
+
+		NSLog(@"[Copilot] Range: %d:%d → %d:%d", startLine, startChar, endLine, endChar);
+
+		size_t from = documentView->convert(text::pos_t(startLine, startChar));
+		size_t to   = documentView->convert(text::pos_t(endLine, endChar));
+		documentView->set_ranges(ng::range_t(from, to));
+	}
+	else
+	{
+		// No range — just insert at cursor without replacing anything
+		NSLog(@"[Copilot] No range, inserting at cursor");
+	}
+
+	documentView->insert(to_s(insertText));
+
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	[copilot sendDidShowCompletion:item];
+	[copilot sendAcceptanceTelemetry:item];
+}
+
+- (void)ensureCompletionPopup
+{
 	if(!_lspTheme)
 	{
 		_lspTheme = [[OakThemeEnvironment alloc] init];
@@ -6052,8 +6146,73 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 	{
 		_lspCompletionPopup = [[OakCompletionPopup alloc] initWithTheme:_lspTheme];
 		_lspCompletionPopup.delegate = (id<OakCompletionPopupDelegate>)self;
-		_lspCompletionPopup.supportsResolve = [[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:self.document];
 	}
+}
+
+- (NSPoint)caretPointForCompletionPopup
+{
+	CGRect caretRect = documentView->rect_at_index(documentView->ranges().last().last.index);
+	return NSMakePoint(NSMinX(caretRect), NSMaxY(caretRect) + 4);
+}
+
+- (void)showCopilotCompletionPopup:(NSArray<NSDictionary*>*)items cursorCharacter:(NSUInteger)cursorChar
+{
+	[self ensureCompletionPopup];
+	_lspCompletionPopup.supportsResolve = YES;
+
+	NSMutableArray<OakCompletionItem*>* completionItems = [NSMutableArray new];
+	for(NSDictionary* item in items)
+	{
+		NSString* fullText = item[@"insertText"] ?: item[@"text"] ?: @"";
+		NSDictionary* range = item[@"range"];
+
+		// Compute the suffix: strip the prefix that's already typed (before cursor)
+		NSString* label = fullText;
+		NSUInteger rangeStartChar = [range[@"start"][@"character"] unsignedIntegerValue];
+		NSUInteger prefixLen = cursorChar - rangeStartChar;
+		if(prefixLen > 0 && prefixLen < fullText.length)
+			label = [fullText substringFromIndex:prefixLen];
+
+		NSString* firstLine = [label componentsSeparatedByString:@"\n"].firstObject;
+		NSArray* fullLines = [fullText componentsSeparatedByString:@"\n"];
+		NSString* detail = fullLines.count > 1
+			? [NSString stringWithFormat:@"Copilot · %lu lines", (unsigned long)fullLines.count]
+			: @"Copilot";
+
+		OakCompletionItem* ci = [[OakCompletionItem alloc] initWithLabel:firstLine
+		                                                      insertText:fullText
+		                                                          detail:detail
+		                                                            kind:15];
+		ci.originalItem = (NSDictionary*)item;
+
+		// Show full suggestion in doc panel for preview
+		NSFont* monoFont = [NSFont userFixedPitchFontOfSize:11];
+		ci.documentation = [[NSAttributedString alloc] initWithString:fullText attributes:@{
+			NSFontAttributeName: monoFont,
+			NSForegroundColorAttributeName: NSColor.labelColor,
+		}];
+		ci.isResolved = YES;
+		[completionItems addObject:ci];
+	}
+
+	_lspInitialPrefixLength = 0;
+	_lspFilterPrefix = @"";
+	_copilotCompletionActive = YES;
+
+	[_lspCompletionPopup showIn:self at:[self caretPointForCompletionPopup] items:completionItems];
+
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	for(NSDictionary* item in items)
+		[copilot sendDidShowCompletion:item];
+}
+
+- (void)showLSPCompletionPopupWithSuggestions:(NSArray<NSDictionary*>*)suggestions prefixLength:(NSUInteger)prefixLen autoInsertSingle:(BOOL)autoInsertSingle
+{
+	if(!documentView)
+		return;
+
+	[self ensureCompletionPopup];
+	_lspCompletionPopup.supportsResolve = [[LSPManager sharedManager] serverSupportsCompletionResolveForDocument:self.document];
 
 	NSMutableArray<OakCompletionItem*>* items = [NSMutableArray arrayWithCapacity:suggestions.count];
 	for(NSDictionary* s in suggestions)
@@ -6157,10 +6316,7 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 		return;
 	}
 
-	CGRect caretRect = documentView->rect_at_index(documentView->ranges().last().last.index);
-	NSPoint caretPoint = NSMakePoint(NSMinX(caretRect), NSMaxY(caretRect) + 4);
-
-	[_lspCompletionPopup showIn:self at:caretPoint items:items];
+	[_lspCompletionPopup showIn:self at:[self caretPointForCompletionPopup] items:items];
 }
 
 // =============
@@ -6333,6 +6489,14 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 
 	AUTO_REFRESH;
 
+	if(_copilotCompletionActive)
+	{
+		[self insertCopilotCompletion:(NSDictionary*)item.originalItem];
+		_copilotCompletionActive = NO;
+		_lspFilterPrefix = nil;
+		return;
+	}
+
 	size_t caret = documentView->ranges().last().last.index;
 	NSUInteger deleteCount = _lspInitialPrefixLength + _lspFilterPrefix.length;
 	size_t from = caret - deleteCount;
@@ -6353,6 +6517,7 @@ static std::multimap<std::pair<size_t, size_t>, std::string> replacementsFromTex
 
 - (void)completionPopupDidDismiss:(OakCompletionPopup*)popup
 {
+	_copilotCompletionActive = NO;
 	_lspFilterPrefix = nil;
 }
 

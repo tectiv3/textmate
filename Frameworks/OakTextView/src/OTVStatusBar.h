@@ -3,11 +3,13 @@
 - (void)showSymbolSelector:(NSPopUpButton*)popUpButton;
 @optional
 - (void)showLSPStatusMenu:(NSPopUpButton*)popUpButton;
+- (void)showCopilotStatusMenu:(NSPopUpButton*)popUpButton;
 @end
 
 @interface OTVStatusBar : NSVisualEffectView
 - (void)showBundlesMenu:(id)sender;
 - (void)setLspStatus:(NSString*)status errors:(NSUInteger)errors warnings:(NSUInteger)warnings info:(NSUInteger)info;
+- (void)setCopilotStatus:(NSInteger)status;
 @property (nonatomic) NSString* selectionString;
 @property (nonatomic) NSString* grammarName;
 @property (nonatomic) NSString* symbolName;

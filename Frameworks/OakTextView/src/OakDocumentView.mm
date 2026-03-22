@@ -1,6 +1,8 @@
 #import "OakDocumentView.h"
 #import "GutterView.h"
+#import "OakSwiftUI-Swift.h"
 #import <lsp/LSPManager.h>
+#import <lsp/CopilotManager.h>
 #import "OTVStatusBar.h"
 #import <document/OakDocument.h>
 #import <file/type.h>
@@ -106,6 +108,7 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspDiagnosticsDidChange:) name:LSPDiagnosticsDidChangeNotification object:nil];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspServerStatusDidChange:) name:LSPServerStatusDidChangeNotification object:nil];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(copilotStatusDidChange:) name:CopilotStatusDidChangeNotification object:nil];
 	}
 	return self;
 }
@@ -328,6 +331,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 
 	[_textView setDocument:self.document];
 	[LSPManager.sharedManager documentDidOpen:aDocument];
+	[[CopilotManager sharedManager] documentDidOpen:aDocument];
+	[[CopilotManager sharedManager] documentDidFocus:aDocument];
 	[gutterView reloadData:self];
 	[self updateStyle];
 
@@ -905,16 +910,19 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)documentContentDidChange:(NSNotification*)notification
 {
 	[LSPManager.sharedManager documentDidChange:notification.object];
+	[[CopilotManager sharedManager] documentDidChange:notification.object];
 }
 
 - (void)documentDidSave:(NSNotification*)notification
 {
 	[LSPManager.sharedManager documentDidSave:notification.object];
+	[[CopilotManager sharedManager] documentDidSave:notification.object];
 }
 
 - (void)documentWillClose:(NSNotification*)notification
 {
 	[LSPManager.sharedManager documentWillClose:notification.object];
+	[[CopilotManager sharedManager] documentWillClose:notification.object];
 }
 
 // =======================
@@ -936,6 +944,8 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 	                  errors:[counts[@"errors"] unsignedIntegerValue]
 	                warnings:[counts[@"warnings"] unsignedIntegerValue]
 	                    info:[counts[@"info"] unsignedIntegerValue]];
+
+	[_statusBar setCopilotStatus:[CopilotManager sharedManager].status];
 }
 
 - (void)lspDiagnosticsDidChange:(NSNotification*)notification
@@ -957,6 +967,110 @@ static NSString* const kFoldingsColumnIdentifier  = @"foldings";
 - (void)lspServerStatusDidChange:(NSNotification*)notification
 {
 	[self updateLSPStatusBar];
+}
+
+- (void)copilotStatusDidChange:(NSNotification*)notification
+{
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	[_statusBar setCopilotStatus:copilot.status];
+
+	switch(copilot.status)
+	{
+		case CopilotStatusReady:
+			[OakNotificationManager.shared showWithMessage:
+				[NSString stringWithFormat:@"Copilot: Connected as %@", copilot.username ?: @"unknown"] type:4];
+			break;
+		case CopilotStatusAuthRequired:
+			[OakNotificationManager.shared showWithMessage:@"Copilot: Authentication required" type:2];
+			break;
+		case CopilotStatusError:
+			[OakNotificationManager.shared showWithMessage:@"Copilot: Server error" type:1];
+			break;
+		default:
+			break;
+	}
+}
+
+- (void)showCopilotStatusMenu:(NSPopUpButton*)popUpButton
+{
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	NSMenu* menu = popUpButton.menu;
+	[menu removeAllItems];
+
+	// Status header
+	NSString* headerText;
+	switch(copilot.status)
+	{
+		case CopilotStatusReady:
+			headerText = [NSString stringWithFormat:@"Copilot — %@", copilot.username ?: @"ready"];
+			break;
+		case CopilotStatusConnecting:
+			headerText = @"Copilot — connecting…";
+			break;
+		case CopilotStatusAuthRequired:
+			headerText = @"Copilot — sign-in required";
+			break;
+		case CopilotStatusError:
+			headerText = @"Copilot — error";
+			break;
+		default:
+			headerText = @"Copilot — disabled";
+			break;
+	}
+	NSMenuItem* header = [[NSMenuItem alloc] initWithTitle:headerText action:nil keyEquivalent:@""];
+	if(copilot.status == CopilotStatusReady)
+		header.state = NSControlStateValueOn;
+	header.enabled = NO;
+	[menu addItem:header];
+
+	[menu addItem:[NSMenuItem separatorItem]];
+
+	if(copilot.status == CopilotStatusAuthRequired)
+	{
+		NSMenuItem* signIn = [[NSMenuItem alloc] initWithTitle:@"Sign In" action:@selector(copilotSignIn:) keyEquivalent:@""];
+		signIn.target = self;
+		[menu addItem:signIn];
+	}
+
+	if(copilot.status == CopilotStatusReady || copilot.status == CopilotStatusError)
+	{
+		NSMenuItem* restart = [[NSMenuItem alloc] initWithTitle:@"Restart Server" action:@selector(copilotRestart:) keyEquivalent:@""];
+		restart.target = self;
+		[menu addItem:restart];
+	}
+
+	NSMenuItem* disable = [[NSMenuItem alloc] initWithTitle:
+		copilot.status == CopilotStatusDisabled ? @"Enable Copilot" : @"Disable Copilot"
+		action:@selector(copilotToggle:) keyEquivalent:@""];
+	disable.target = self;
+	[menu addItem:disable];
+}
+
+- (void)copilotSignIn:(id)sender
+{
+	[[CopilotManager sharedManager] signIn];
+}
+
+- (void)copilotRestart:(id)sender
+{
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	[copilot shutdown];
+	if(self.document)
+		[copilot documentDidOpen:self.document];
+}
+
+- (void)copilotToggle:(id)sender
+{
+	CopilotManager* copilot = [CopilotManager sharedManager];
+	if(copilot.status == CopilotStatusDisabled)
+	{
+		if(self.document)
+			[copilot documentDidOpen:self.document];
+	}
+	else
+	{
+		[copilot shutdown];
+	}
 }
 
 - (void)showLSPStatusMenu:(NSPopUpButton*)popUpButton

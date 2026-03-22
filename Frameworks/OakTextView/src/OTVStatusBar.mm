@@ -59,6 +59,7 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 @property (nonatomic) NSPopUpButton* symbolPopUp;
 @property (nonatomic) NSPopUpButton* lspPopUp;
 @property (nonatomic) NSView*        lspDivider;
+@property (nonatomic) NSPopUpButton* copilotPopUp;
 @property (nonatomic) NSButton*      macroRecordingButton;
 @property (nonatomic) NSArray<NSLayoutConstraint*>* lspVisibleConstraints;
 @property (nonatomic) NSArray<NSLayoutConstraint*>* lspHiddenConstraints;
@@ -127,6 +128,10 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		self.lspDivider = dividerSix;
 		self.lspDivider.hidden = YES;
 
+		self.copilotPopUp = OakCreateStatusBarPopUpButton(nil, @"Copilot Status");
+		[[self.copilotPopUp cell] setUsesItemFromMenu:NO];
+		[self updateCopilotDisplayItem:0];
+
 		NSDictionary* views = @{
 			@"topDivider":   topDivider,
 			@"line":         line,
@@ -142,6 +147,7 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 			@"dividerFive":  dividerFive,
 			@"dividerSix":   dividerSix,
 			@"lsp":          self.lspPopUp,
+			@"copilot":       self.copilotPopUp,
 			@"recording":    self.macroRecordingButton,
 		};
 
@@ -168,21 +174,23 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		// Center non-text control (without dividerSix — added dynamically)
 		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[selection]-(>=1)-[dividerOne]-(>=1)-[dividerTwo]-(>=1)-[dividerThree]-(>=1)-[items]-(>=1)-[dividerFour]-(>=1)-[dividerFive]-(>=1)-[recording]" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
 
-		// LSP visible: symbol → dividerSix → lsp → dividerFive, with baseline and divider height
+		// LSP visible: symbol → copilot → dividerSix → lsp → dividerFive
 		self.lspVisibleConstraints = ({
 			NSMutableArray* c = [NSMutableArray new];
-			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[symbol]-5-[dividerSix(==1)]-2-[lsp]-5-[dividerFive]" options:0 metrics:nil views:views]];
+			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[symbol]-4-[copilot]-4-[dividerSix(==1)]-2-[lsp]-5-[dividerFive]" options:0 metrics:nil views:views]];
 			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-5-[dividerOne(==15,==dividerTwo,==dividerThree,==dividerFour,==dividerFive,==dividerSix)]-5-|" options:0 metrics:nil views:views]];
 			[c addObject:[NSLayoutConstraint constraintWithItem:self.lspPopUp attribute:NSLayoutAttributeBaseline relatedBy:NSLayoutRelationEqual toItem:self.symbolPopUp attribute:NSLayoutAttributeBaseline multiplier:1 constant:0]];
 			[c addObject:[NSLayoutConstraint constraintWithItem:dividerSix attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:dividerOne attribute:NSLayoutAttributeCenterY multiplier:1 constant:0]];
+			[c addObject:[NSLayoutConstraint constraintWithItem:self.copilotPopUp attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self.macroRecordingButton attribute:NSLayoutAttributeCenterY multiplier:1 constant:0]];
 			[c copy];
 		});
 
-		// LSP hidden: symbol → dividerFive directly, no dividerSix
+		// LSP hidden: symbol → copilot → dividerFive directly
 		self.lspHiddenConstraints = ({
 			NSMutableArray* c = [NSMutableArray new];
-			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[symbol]-5-[dividerFive]" options:0 metrics:nil views:views]];
+			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[symbol]-4-[copilot]-4-[dividerFive]" options:0 metrics:nil views:views]];
 			[c addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-5-[dividerOne(==15,==dividerTwo,==dividerThree,==dividerFour,==dividerFive)]-5-|" options:0 metrics:nil views:views]];
+			[c addObject:[NSLayoutConstraint constraintWithItem:self.copilotPopUp attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:self.macroRecordingButton attribute:NSLayoutAttributeCenterY multiplier:1 constant:0]];
 			[c copy];
 		});
 
@@ -196,6 +204,7 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(bundleItemsPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.bundleItemsPopUp];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(symbolPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.symbolPopUp];
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(lspPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.lspPopUp];
+		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(copilotPopUpButtonWillPopUp:) name:NSPopUpButtonWillPopUpNotification object:self.copilotPopUp];
 	}
 	return self;
 }
@@ -448,6 +457,45 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 	NSMenuItem* displayItem = [[NSMenuItem alloc] initWithTitle:@"" action:NULL keyEquivalent:@""];
 	displayItem.attributedTitle = attrTitle;
 	[[self.lspPopUp cell] setMenuItem:displayItem];
+}
+
+- (void)updateCopilotDisplayItem:(NSInteger)status
+{
+	NSColor* color;
+	NSString* tooltip;
+
+	switch(status)
+	{
+		case 0: color = NSColor.tertiaryLabelColor;   tooltip = @"Copilot: Disabled";          break;
+		case 1: color = NSColor.systemYellowColor;    tooltip = @"Copilot: Connecting…";       break;
+		case 2: color = NSColor.labelColor;           tooltip = @"Copilot: Ready";             break;
+		case 3: color = NSColor.systemOrangeColor;    tooltip = @"Copilot: Sign-in required";  break;
+		case 4: color = NSColor.systemRedColor;       tooltip = @"Copilot: Error";             break;
+		default: color = NSColor.tertiaryLabelColor;  tooltip = @"Copilot";                    break;
+	}
+
+	NSImageSymbolConfiguration* symCfg = [NSImageSymbolConfiguration configurationWithPointSize:11 weight:NSFontWeightRegular];
+	NSImage* sparkle = [[NSImage imageWithSystemSymbolName:@"sparkle" accessibilityDescription:@"Copilot"] imageWithSymbolConfiguration:symCfg];
+	[sparkle setTemplate:YES];
+
+	NSMenuItem* displayItem = [[NSMenuItem alloc] initWithTitle:@"" action:NULL keyEquivalent:@""];
+	displayItem.image = sparkle;
+
+	// Tint by wrapping in an attributed string attachment wouldn't work; use contentTintColor on the popup
+	self.copilotPopUp.contentTintColor = color;
+	[[self.copilotPopUp cell] setMenuItem:displayItem];
+	self.copilotPopUp.toolTip = tooltip;
+}
+
+- (void)setCopilotStatus:(NSInteger)status
+{
+	[self updateCopilotDisplayItem:status];
+}
+
+- (void)copilotPopUpButtonWillPopUp:(NSNotification*)aNotification
+{
+	if([self.delegate respondsToSelector:@selector(showCopilotStatusMenu:)])
+		[self.delegate showCopilotStatusMenu:self.copilotPopUp];
 }
 
 - (void)dealloc
