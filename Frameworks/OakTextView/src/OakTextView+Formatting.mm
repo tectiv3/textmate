@@ -23,11 +23,19 @@ static NSString* runCustomFormatter (std::string const& command, NSString* input
 
 	task.environment = env;
 
+	// A stale project path (deleted directory) must not abort the app:
+	// -[NSTask launch] raises when the working directory does not exist, and
+	// TextMate's NSExceptionHandler escalates that to abort before @catch.
 	auto it = variables.find("TM_PROJECT_DIRECTORY");
 	if(it == variables.end())
 		it = variables.find("TM_DIRECTORY");
 	if(it != variables.end())
-		task.currentDirectoryURL = [NSURL fileURLWithPath:[NSString stringWithCxxString:it->second]];
+	{
+		BOOL isDirectory = NO;
+		NSString* directory = [NSString stringWithCxxString:it->second];
+		if([NSFileManager.defaultManager fileExistsAtPath:directory isDirectory:&isDirectory] && isDirectory)
+			task.currentDirectoryURL = [NSURL fileURLWithPath:directory];
+	}
 
 	NSPipe* stdinPipe  = [NSPipe pipe];
 	NSPipe* stdoutPipe = [NSPipe pipe];
