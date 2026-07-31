@@ -120,6 +120,16 @@ void OakPrintBadAssertion (char const* lhs, char const* op, char const* rhs, std
 {
 	if([[exception name] isEqualToString:@"FSExecutionErrorException"])
 		return NO;
+
+	for(NSString* frame in [exception callStackSymbols])
+	{
+		if([frame containsString:@"Accessibility"] || [frame containsString:@"_AX"])
+		{
+			os_log_info(OS_LOG_DEFAULT, "Suppressed accessibility exception: %{public}@: %{public}@", exception.name, exception.reason);
+			return NO;
+		}
+	}
+
 	os_log_error(OS_LOG_DEFAULT, "%{public}@: %{public}@\n", exception.name, exception.reason);
 	abort();
 	return YES;
