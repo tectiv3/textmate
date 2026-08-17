@@ -23,9 +23,11 @@ static NSString* runCustomFormatter (std::string const& command, NSString* input
 
 	task.environment = env;
 
-	auto it = variables.find("TM_PROJECT_DIRECTORY");
+	// Same precedence as OakCommand: the document's own directory wins over the
+	// window's project directory, which is sticky and can outlive the folder.
+	auto it = variables.find("TM_DIRECTORY");
 	if(it == variables.end())
-		it = variables.find("TM_DIRECTORY");
+		it = variables.find("TM_PROJECT_DIRECTORY");
 	if(it != variables.end())
 		task.currentDirectoryURL = [NSURL fileURLWithPath:[NSString stringWithCxxString:it->second]];
 
@@ -37,12 +39,14 @@ static NSString* runCustomFormatter (std::string const& command, NSString* input
 	task.standardOutput = stdoutPipe;
 	task.standardError  = stderrPipe;
 
-	@try {
-		[task launch];
-	}
-	@catch(NSException* e) {
+	// -[NSTask launch] raises when it cannot start (missing or unreadable working
+	// directory, bad launch path) and our NSExceptionHandler delegate aborts on
+	// every raise — including handled ones — so @catch never gets to run.
+	NSError* launchError = nil;
+	if(![task launchAndReturnError:&launchError])
+	{
 		if(outError)
-			*outError = [NSString stringWithFormat:@"Failed to launch formatter: %@", e.reason];
+			*outError = [NSString stringWithFormat:@"Failed to launch formatter: %@", launchError.localizedDescription];
 		return nil;
 	}
 
