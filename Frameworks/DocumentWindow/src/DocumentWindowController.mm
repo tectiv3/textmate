@@ -2678,8 +2678,14 @@ static NSUInteger DisableSessionSavingCount = 0;
 
 	if(NSString* projectDir = self.projectPath)
 	{
-		res["TM_PROJECT_DIRECTORY"] = [projectDir fileSystemRepresentation];
-		res["TM_PROJECT_UUID"]      = to_s(self.identifier);
+		// The project path is seeded once (session restore, first pathed document,
+		// project folder menu) and never re-validated, so it can outlive the folder
+		// it names. Skip the variable rather than clear the path: consumers fall back
+		// to TM_DIRECTORY, and an offline volume recovers when it is mounted again.
+		BOOL isDirectory = NO;
+		if([NSFileManager.defaultManager fileExistsAtPath:projectDir isDirectory:&isDirectory] && isDirectory)
+			res["TM_PROJECT_DIRECTORY"] = [projectDir fileSystemRepresentation];
+		res["TM_PROJECT_UUID"] = to_s(self.identifier);
 	}
 
 	return res;
