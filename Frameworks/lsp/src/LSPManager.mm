@@ -701,6 +701,16 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	return @{ @"errors": @(errors), @"warnings": @(warnings), @"info": @(info) };
 }
 
+- (NSArray<NSDictionary*>*)diagnosticsForDocument:(OakDocument*)document
+{
+	NSString* path = document.path;
+	if(!path)
+		return @[];
+
+	NSURL* fileURL = [NSURL fileURLWithPath:path];
+	return _diagnosticsByURI[fileURL.absoluteString] ?: @[];
+}
+
 - (NSString*)serverStatusForDocument:(OakDocument*)document
 {
 	LSPClient* client = _documentClients[document.identifier];

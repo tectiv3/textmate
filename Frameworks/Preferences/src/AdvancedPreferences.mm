@@ -15,6 +15,7 @@
 			@"fontSmoothing":                       kUserDefaultsFontSmoothingKey,
 			@"hideStatusBar":                       kUserDefaultsHideStatusBarKey,
 			@"showFavoritesInsteadOfUntitled":      kUserDefaultsShowFavoritesInsteadOfUntitledKey,
+			@"lspShowInlineDiagnostics":            kUserDefaultsLSPShowInlineDiagnosticsKey,
 			@"lineNumberFontName":                  kUserDefaultsLineNumberFontNameKey,
 			@"lineNumberScaleFactor":               kUserDefaultsLineNumberScaleFactorKey,
 			@"tabItemMinWidth":                     kUserDefaultsTabItemMinWidthKey,
@@ -59,6 +60,7 @@
 	NSPopUpButton* fontSmoothingPopUp                 = OakCreatePopUpButton();
 	NSButton* hideStatusBarCheckBox                   = OakCreateCheckBox(@"Hide status bar");
 	NSButton* showFavoritesCheckBox                   = OakCreateCheckBox(@"Show favorites instead of untitled");
+	NSButton* showInlineDiagnosticsCheckBox           = OakCreateCheckBox(@"Show inline LSP diagnostics");
 
 	NSTextField* lineNumberFontField                  = [NSTextField textFieldWithString:@""];
 	NSTextField* lineNumberScaleField                 = [NSTextField textFieldWithString:@""];
@@ -102,7 +104,7 @@
 	};
 
 	NSGridView* gridView = [NSGridView gridViewWithViews:@[
-		// Editor — rows 0-9
+		// Editor — rows 0-11
 		@[ OakCreateLabel(@"Editor:"),       disableTypingPairsCheckBox ],                                                  // 0
 		@[ NSGridCell.emptyContentView,      makeHint(@"Stops auto-closing of brackets, quotes, and other paired characters") ], // 1
 		@[ NSGridCell.emptyContentView,      disableAntiAliasCheckBox ],                                                   // 2
@@ -113,57 +115,59 @@
 		@[ NSGridCell.emptyContentView,      makeHint(@"Hides the status bar at the bottom of the editor window") ],       // 7
 		@[ NSGridCell.emptyContentView,      showFavoritesCheckBox ],                                                      // 8
 		@[ NSGridCell.emptyContentView,      makeHint(@"Shows the favorites dialog instead of an empty document at startup") ], // 9
+		@[ NSGridCell.emptyContentView,      showInlineDiagnosticsCheckBox ],                                              // 10
+		@[ NSGridCell.emptyContentView,      makeHint(@"Tints lines with LSP diagnostics and shows the message at the right edge") ], // 11
 
-		@[ ], // 10 — separator
+		@[ ], // 12 — separator
 
-		// Appearance — rows 11-18
-		@[ OakCreateLabel(@"Line number font:"), lineNumberFontField ],                                                    // 11
-		@[ NSGridCell.emptyContentView,      makeHint(@"PostScript font name for the gutter (e.g. Menlo-Regular)") ],      // 12
-		@[ OakCreateLabel(@"Line number scale:"), lineNumberScaleField ],                                                  // 13
-		@[ NSGridCell.emptyContentView,      makeHint(@"Scale factor relative to editor font size (default 0.8)") ],       // 14
-		@[ OakCreateLabel(@"Min tab width:"), tabMinWidthField ],                                                          // 15
-		@[ NSGridCell.emptyContentView,      makeHint(@"Minimum pixel width for document tabs (default 120)") ],           // 16
-		@[ OakCreateLabel(@"Max tab width:"), tabMaxWidthField ],                                                          // 17
-		@[ NSGridCell.emptyContentView,      makeHint(@"Maximum pixel width for document tabs (default 250)") ],           // 18
+		// Appearance — rows 13-20
+		@[ OakCreateLabel(@"Line number font:"), lineNumberFontField ],                                                    // 13
+		@[ NSGridCell.emptyContentView,      makeHint(@"PostScript font name for the gutter (e.g. Menlo-Regular)") ],      // 14
+		@[ OakCreateLabel(@"Line number scale:"), lineNumberScaleField ],                                                  // 15
+		@[ NSGridCell.emptyContentView,      makeHint(@"Scale factor relative to editor font size (default 0.8)") ],       // 16
+		@[ OakCreateLabel(@"Min tab width:"), tabMinWidthField ],                                                          // 17
+		@[ NSGridCell.emptyContentView,      makeHint(@"Minimum pixel width for document tabs (default 120)") ],           // 18
+		@[ OakCreateLabel(@"Max tab width:"), tabMaxWidthField ],                                                          // 19
+		@[ NSGridCell.emptyContentView,      makeHint(@"Maximum pixel width for document tabs (default 250)") ],           // 20
 
-		@[ ], // 19 — separator
+		@[ ], // 21 — separator
 
-		// Clipboard — rows 20-27
-		@[ OakCreateLabel(@"Clipboard:"),    disablePersistentClipboardCheckBox ],                                         // 20
-		@[ NSGridCell.emptyContentView,      makeHint(@"Uses in-memory database only; clipboard history is lost on quit") ], // 21
-		@[ OakCreateLabel(@"Keep at least:"), clipboardKeepAtLeastField ],                                                 // 22
-		@[ NSGridCell.emptyContentView,      makeHint(@"Minimum number of clipboard entries to retain (default 25)") ],    // 23
-		@[ OakCreateLabel(@"Keep at most:"), clipboardKeepAtMostField ],                                                   // 24
-		@[ NSGridCell.emptyContentView,      makeHint(@"Maximum clipboard entries before pruning (default 500)") ],        // 25
-		@[ OakCreateLabel(@"Days to keep:"), clipboardDaysToKeepField ],                                                   // 26
-		@[ NSGridCell.emptyContentView,      makeHint(@"Entries older than this are pruned (default 30)") ],               // 27
+		// Clipboard — rows 22-29
+		@[ OakCreateLabel(@"Clipboard:"),    disablePersistentClipboardCheckBox ],                                         // 22
+		@[ NSGridCell.emptyContentView,      makeHint(@"Uses in-memory database only; clipboard history is lost on quit") ], // 23
+		@[ OakCreateLabel(@"Keep at least:"), clipboardKeepAtLeastField ],                                                 // 24
+		@[ NSGridCell.emptyContentView,      makeHint(@"Minimum number of clipboard entries to retain (default 25)") ],    // 25
+		@[ OakCreateLabel(@"Keep at most:"), clipboardKeepAtMostField ],                                                   // 26
+		@[ NSGridCell.emptyContentView,      makeHint(@"Maximum clipboard entries before pruning (default 500)") ],        // 27
+		@[ OakCreateLabel(@"Days to keep:"), clipboardDaysToKeepField ],                                                   // 28
+		@[ NSGridCell.emptyContentView,      makeHint(@"Entries older than this are pruned (default 30)") ],               // 29
 
-		@[ ], // 28 — separator
+		@[ ], // 30 — separator
 
-		// Find — rows 29-32
-		@[ OakCreateLabel(@"Find:"),         keepSearchResultsCheckBox ],                                                  // 29
-		@[ NSGridCell.emptyContentView,      makeHint(@"Keeps the Find in Folder results window open after double-clicking a match") ], // 30
-		@[ NSGridCell.emptyContentView,      alwaysFindInDocumentCheckBox ],                                               // 31
-		@[ NSGridCell.emptyContentView,      makeHint(@"Find always searches the full document, even when text is selected") ], // 32
+		// Find — rows 31-34
+		@[ OakCreateLabel(@"Find:"),         keepSearchResultsCheckBox ],                                                  // 31
+		@[ NSGridCell.emptyContentView,      makeHint(@"Keeps the Find in Folder results window open after double-clicking a match") ], // 32
+		@[ NSGridCell.emptyContentView,      alwaysFindInDocumentCheckBox ],                                               // 33
+		@[ NSGridCell.emptyContentView,      makeHint(@"Find always searches the full document, even when text is selected") ], // 34
 
-		@[ ], // 33 — separator
+		@[ ], // 35 — separator
 
-		// File Browser — rows 34-37
-		@[ OakCreateLabel(@"File Browser:"), disableOpenAnimationCheckBox ],                                               // 34
-		@[ NSGridCell.emptyContentView,      makeHint(@"Disables the expand/collapse animation in the file browser") ],    // 35
-		@[ NSGridCell.emptyContentView,      disableFolderStateRestoreCheckBox ],                                          // 36
-		@[ NSGridCell.emptyContentView,      makeHint(@"Stops restoring expanded/collapsed folder state when reopening projects") ], // 37
+		// File Browser — rows 36-39
+		@[ OakCreateLabel(@"File Browser:"), disableOpenAnimationCheckBox ],                                               // 36
+		@[ NSGridCell.emptyContentView,      makeHint(@"Disables the expand/collapse animation in the file browser") ],    // 37
+		@[ NSGridCell.emptyContentView,      disableFolderStateRestoreCheckBox ],                                          // 38
+		@[ NSGridCell.emptyContentView,      makeHint(@"Stops restoring expanded/collapsed folder state when reopening projects") ], // 39
 
-		@[ ], // 38 — separator
+		@[ ], // 40 — separator
 
-		// Bundles — rows 39-42
-		@[ OakCreateLabel(@"Bundles:"),      disableBundleSuggestionsCheckBox ],                                           // 39
-		@[ NSGridCell.emptyContentView,      makeHint(@"Stops suggesting bundle installation for unrecognized file types") ], // 40
-		@[ OakCreateLabel(@"Never suggest for:"), grammarsToNeverSuggestField ],                                           // 41
-		@[ NSGridCell.emptyContentView,      makeHint(@"Comma-separated list of grammar UUIDs to exclude from suggestions") ], // 42
+		// Bundles — rows 41-44
+		@[ OakCreateLabel(@"Bundles:"),      disableBundleSuggestionsCheckBox ],                                           // 41
+		@[ NSGridCell.emptyContentView,      makeHint(@"Stops suggesting bundle installation for unrecognized file types") ], // 42
+		@[ OakCreateLabel(@"Never suggest for:"), grammarsToNeverSuggestField ],                                           // 43
+		@[ NSGridCell.emptyContentView,      makeHint(@"Comma-separated list of grammar UUIDs to exclude from suggestions") ], // 44
 	]];
 
-	NSView* content = OakSetupGridViewWithSeparators(gridView, { 10, 19, 28, 33, 38 });
+	NSView* content = OakSetupGridViewWithSeparators(gridView, { 12, 21, 30, 35, 40 });
 
 	NSScrollView* scrollView = [[NSScrollView alloc] init];
 	scrollView.documentView = content;
@@ -187,6 +191,7 @@
 	[fontSmoothingPopUp         bind:NSSelectedTagBinding toObject:self withKeyPath:@"fontSmoothing" options:nil];
 	[hideStatusBarCheckBox      bind:NSValueBinding toObject:self withKeyPath:@"hideStatusBar"      options:nil];
 	[showFavoritesCheckBox      bind:NSValueBinding toObject:self withKeyPath:@"showFavoritesInsteadOfUntitled" options:nil];
+	[showInlineDiagnosticsCheckBox bind:NSValueBinding toObject:self withKeyPath:@"lspShowInlineDiagnostics" options:nil];
 
 	// Appearance bindings
 	[lineNumberFontField  bind:NSValueBinding toObject:self withKeyPath:@"lineNumberFontName"      options:@{ NSNullPlaceholderBindingOption: @"Uses editor font when blank" }];

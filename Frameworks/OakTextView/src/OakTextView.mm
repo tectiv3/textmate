@@ -475,6 +475,7 @@ static std::string shell_quote (std::vector<std::string> paths)
 		[_lspCompletionPopup dismiss];
 		[self dismissLSPHoverPanel];
 		[_lspReferencesPanel close];
+		[self collapseExpandedDiagnostic];
 
 		documentView.reset();
 	}
@@ -576,6 +577,17 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 		[self bind:@"scmStatus" toObject:self withKeyPath:@"document.scmStatus" options:nil];
 		OakObserveUserDefaults(self);
+
+		_diagnosticBannersVisible = [NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsLSPShowInlineDiagnosticsKey];
+		_expandedDiagnosticLine   = kNoExpandedDiagnostic;
+		[NSNotificationCenter.defaultCenter addObserver:self
+			selector:@selector(lspDiagnosticsDidChange:)
+			name:LSPDiagnosticsDidChangeNotification
+			object:nil];
+		[NSWorkspace.sharedWorkspace.notificationCenter addObserver:self
+			selector:@selector(diagnosticAccessibilityOptionsDidChange:)
+			name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+			object:nil];
 	}
 	return self;
 }
@@ -686,6 +698,7 @@ static size_t const kSCMDiffGutterMaxBytes = 2 * 1024 * 1024;
 - (void)dealloc
 {
 	[NSNotificationCenter.defaultCenter removeObserver:self];
+	[NSWorkspace.sharedWorkspace.notificationCenter removeObserver:self];
 	[_scmDiffGutterTimer invalidate];
 	[self unbind:@"scmStatus"];
 	[self dismissLSPHoverPanel];
@@ -937,6 +950,8 @@ doScroll:
 		if(_ghostText && _ghostTextCaret <= documentView->size())
 			[self drawGhostText:context inRect:aRect];
 	}
+
+	[self drawDiagnosticsInRect:aRect];
 
 	// Draw definition highlight underline when Cmd-hovering
 	if(!_definitionHighlightRange.empty() && _definitionHighlightRange.max().index <= documentView->size())
@@ -1399,11 +1414,16 @@ doScroll:
 {
 	if(!documentView)
 		return nil;
-	NSMutableArray* links = [NSMutableArray array];
+	NSMutableArray* children = [NSMutableArray array];
 	std::shared_ptr<links_t> links_ = self.links;
 	for(auto const& pair : *links_)
-		[links addObject:pair.second];
-	return links;
+		[children addObject:pair.second];
+	// A subview is not an accessibility child unless it is listed here, so the
+	// expanded diagnostic box has to be appended — after the links, which is the
+	// order the array-based accessors below assume.
+	if(_expandedDiagnosticBox)
+		[children addObject:_expandedDiagnosticBox];
+	return children;
 }
 
 - (void)setAccessibilityValue:(NSString*)value
@@ -1472,7 +1492,7 @@ doScroll:
 - (NSUInteger)accessibilityArrayAttributeCount:(NSString*)attribute
 {
 	if([attribute isEqualToString:NSAccessibilityChildrenAttribute])
-		return self.links->size();
+		return self.links->size() + (_expandedDiagnosticBox ? 1 : 0);
 
 	return [super accessibilityArrayAttributeCount:attribute];
 }
@@ -1483,8 +1503,13 @@ doScroll:
 	{
 		links_ptr const links = self.links;
 		NSMutableArray* values = [NSMutableArray arrayWithCapacity:maxCount];
-		for(auto it = links->nth(index); maxCount && it != links->end(); ++it, --maxCount)
-			[values addObject:it->second];
+		if(index < links->size())
+		{
+			for(auto it = links->nth(index); maxCount && it != links->end(); ++it, --maxCount)
+				[values addObject:it->second];
+		}
+		if(maxCount && _expandedDiagnosticBox && index + values.count == links->size())
+			[values addObject:_expandedDiagnosticBox];
 		return values;
 	}
 
@@ -1493,6 +1518,9 @@ doScroll:
 
 - (NSUInteger)accessibilityIndexOfChild:(id)child
 {
+	if(_expandedDiagnosticBox && child == _expandedDiagnosticBox)
+		return self.links->size();
+
 	if([child isKindOfClass:[OakAccessibleLink class]])
 	{
 		OakAccessibleLink* link = (OakAccessibleLink* )child;
@@ -2913,6 +2941,8 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 		[aMenuItem setTitle:self.softWrap ? @"Disable Soft Wrap" : @"Enable Soft Wrap"];
 	else if([aMenuItem action] == @selector(toggleScrollPastEnd:))
 		[aMenuItem setTitle:self.scrollPastEnd ? @"Disallow Scroll Past End" : @"Allow Scroll Past End"];
+	else if([aMenuItem action] == @selector(toggleInlineDiagnostics:))
+		[aMenuItem setTitle:_diagnosticBannersVisible ? @"Hide Inline Diagnostics" : @"Show Inline Diagnostics"];
 	else if([aMenuItem action] == @selector(toggleShowWrapColumn:))
 		[aMenuItem setTitle:(documentView && documentView->draw_wrap_column()) ? @"Hide Wrap Column" : @"Show Wrap Column"];
 	else if([aMenuItem action] == @selector(toggleShowIndentGuides:))
@@ -3235,6 +3265,13 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 - (IBAction)toggleScrollPastEnd:(id)sender
 {
 	self.scrollPastEnd = !self.scrollPastEnd;
+}
+
+// Writes the user default rather than just this view, so the Preferences
+// checkbox and every other open document stay in step.
+- (IBAction)toggleInlineDiagnostics:(id)sender
+{
+	[NSUserDefaults.standardUserDefaults setBool:!_diagnosticBannersVisible forKey:kUserDefaultsLSPShowInlineDiagnosticsKey];
 }
 
 - (IBAction)toggleSoftWrap:(id)sender
@@ -3779,6 +3816,13 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 - (void)resetCursorRects
 {
 	[self addCursorRect:[self visibleRect] cursor:_showDragCursor ? [NSCursor arrowCursor] : (_showDefinitionCursor ? [NSCursor pointingHandCursor] : (_showColumnSelectionCursor ? [NSCursor crosshairCursor] : [self ibeamCursor]))];
+
+	// A banner is a button, so it must not claim to be selectable text.
+	if(_showDiagnosticBannerCursor)
+	{
+		for(auto const& banner : _diagnosticBannerRects)
+			[self addCursorRect:banner.rect cursor:[NSCursor pointingHandCursor]];
+	}
 }
 
 - (void)setShowDefinitionCursor:(BOOL)flag
@@ -3812,8 +3856,24 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 - (void)viewDidMoveToWindow
 {
 	[NSNotificationCenter.defaultCenter removeObserver:self name:NSWindowDidResignKeyNotification object:nil];
+	if(_diagnosticObservedClipView)
+	{
+		[NSNotificationCenter.defaultCenter removeObserver:self name:NSViewBoundsDidChangeNotification object:_diagnosticObservedClipView];
+		_diagnosticObservedClipView = nil;
+	}
+
 	if(self.window)
+	{
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(windowDidResignKey:) name:NSWindowDidResignKeyNotification object:self.window];
+		if(NSClipView* clipView = self.enclosingScrollView.contentView)
+		{
+			_diagnosticObservedClipView = clipView;
+			[NSNotificationCenter.defaultCenter addObserver:self
+				selector:@selector(diagnosticScrollBoundsDidChange:)
+				name:NSViewBoundsDidChangeNotification
+				object:clipView];
+		}
+	}
 }
 
 - (void)windowDidResignKey:(NSNotification*)aNotification
@@ -3839,6 +3899,8 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 
 	NSPoint pos = [self convertPoint:[anEvent locationInWindow] fromView:nil];
 	ng::index_t index = documentView->index_at_point(pos);
+
+	[self updateDiagnosticBannerCursor];
 
 	if(_showDefinitionCursor)
 	{
@@ -3888,6 +3950,15 @@ static char const* kOakMenuItemTitle = "OakMenuItemTitle";
 	self.fontSmoothing = (OTVFontSmoothing)[NSUserDefaults.standardUserDefaults integerForKey:kUserDefaultsFontSmoothingKey];
 	self.scrollPastEnd = [NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsScrollPastEndKey];
 	self.themeUUID     = self.effectiveThemeUUID;
+
+	BOOL showDiagnostics = [NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsLSPShowInlineDiagnosticsKey];
+	if(_diagnosticBannersVisible != showDiagnostics)
+	{
+		_diagnosticBannersVisible = showDiagnostics;
+		[self collapseExpandedDiagnostic];
+		_diagnosticBannerRects.clear();
+		[self setNeedsDisplay:YES];
+	}
 }
 
 - (void)viewDidChangeEffectiveAppearance
@@ -4141,6 +4212,27 @@ static scope::context_t add_modifiers_to_scope (scope::context_t scope, NSUInteg
 
 	if([self.inputContext handleEvent:anEvent] || !documentView || [anEvent type] != NSEventTypeLeftMouseDown || ignoreMouseDown)
 		return (void)(ignoreMouseDown = NO);
+
+	// A banner click must not pre-empt modifier- or multi-click-driven
+	// selection, and must still leave a valid anchor for mouseDragged:.
+	NSPoint mouseDownPoint = [self convertPoint:[anEvent locationInWindow] fromView:nil];
+	if([anEvent clickCount] == 1 && !([anEvent modifierFlags] & (NSEventModifierFlagShift | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagCommand)) && [self handleDiagnosticBannerClickAtPoint:mouseDownPoint])
+	{
+		mouseDownPos           = mouseDownPoint;
+		mouseDownClickCount    = [anEvent clickCount];
+		mouseDownModifierFlags = [anEvent modifierFlags];
+
+		// Returning here skips actOnMouseDown, the sole writer of mouseDownIndex,
+		// so a drag off the banner would otherwise extend the selection from
+		// whatever anchor the previous click left behind. The branch excludes
+		// modifiers, so this is what actOnMouseDown would have derived.
+		ng::index_t index = documentView->index_at_point(mouseDownPoint);
+		index.carry = 0;
+		mouseDownIndex = index;
+		return;
+	}
+
+	[self collapseExpandedDiagnostic];
 
 	if(ng::range_t r = documentView->folded_range_at_point([self convertPoint:[anEvent locationInWindow] fromView:nil]))
 	{

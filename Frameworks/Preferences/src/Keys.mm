@@ -38,6 +38,7 @@ static NSDictionary* default_settings ()
 		kUserDefaultsClipboardHistoryKeepAtLeast: @(25),
 		kUserDefaultsClipboardHistoryKeepAtMost:  @(500),
 		kUserDefaultsClipboardHistoryDaysToKeep:  @(30),
+		kUserDefaultsLSPShowInlineDiagnosticsKey:    @YES,
 	};
 }
 
@@ -119,6 +120,12 @@ NSString* const kUserDefaultsDisableAntiAliasKey        = @"disableAntiAlias";
 NSString* const kUserDefaultsLineNumbersKey             = @"lineNumbers";
 NSString* const kUserDefaultsLineNumberScaleFactorKey   = @"lineNumberScaleFactor";
 NSString* const kUserDefaultsLineNumberFontNameKey      = @"lineNumberFontName";
+
+// =======
+// = LSP =
+// =======
+
+NSString* const kUserDefaultsLSPShowInlineDiagnosticsKey = @"lspShowInlineDiagnostics";
 
 // ==============
 // = Formatters =

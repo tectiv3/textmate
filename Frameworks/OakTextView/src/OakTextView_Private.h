@@ -259,6 +259,15 @@ private:
 	ng::layout_t* _layout;
 };
 
+static size_t const kNoExpandedDiagnostic = SIZE_T_MAX;
+
+struct diagnostic_banner_t
+{
+	NSRect rect;
+	size_t line;
+	NSDictionary* diagnostic;
+};
+
 @interface OakTextView () <NSTextInputClient, NSDraggingSource, NSIgnoreMisspelledWords, NSChangeSpelling, NSTextFieldDelegate, NSTouchBarDelegate, NSAccessibilityCustomRotorItemSearchDelegate, OakUserDefaultsObserver>
 {
 @public
@@ -361,6 +370,16 @@ private:
 	NSTimer* _ghostTextTimer;
 	CGFloat _ghostTextExtraHeight;
 
+	// = LSP Diagnostics =
+
+	std::vector<diagnostic_banner_t> _diagnosticBannerRects;
+	BOOL _diagnosticBannersVisible;
+	CGFloat _diagnosticLastScrollX;
+	__weak NSClipView* _diagnosticObservedClipView;
+	size_t _expandedDiagnosticLine;   // kNoExpandedDiagnostic when collapsed
+	NSTextView* _expandedDiagnosticBox;
+	BOOL _showDiagnosticBannerCursor;
+
 	// =================
 	// = Accessibility =
 	// =================
@@ -435,12 +454,26 @@ private:
 
 @interface OakTextView (LSP)
 - (IBAction)lspCodeActions:(id)sender;
+- (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions;
+- (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions atPoint:(NSPoint)point;
+- (BOOL)canRequestCodeActions;
 - (OakThemeEnvironment*)lspTheme;
 - (NSDictionary*)bestDefinitionLocation:(NSArray<NSDictionary*>*)locations currentURI:(NSString*)currentUri;
 @end
 
 @interface OakTextView (Formatting)
 - (void)performFormatOnSave;
+@end
+
+@interface OakTextView (Diagnostics)
+- (void)drawDiagnosticsInRect:(NSRect)aRect;
+- (BOOL)handleDiagnosticBannerClickAtPoint:(NSPoint)point;
+- (BOOL)isPointInExpandableDiagnosticBanner:(NSPoint)point;
+- (void)collapseExpandedDiagnostic;
+- (void)updateDiagnosticBannerCursor;
+- (void)lspDiagnosticsDidChange:(NSNotification*)notification;
+- (void)diagnosticScrollBoundsDidChange:(NSNotification*)notification;
+- (void)diagnosticAccessibilityOptionsDidChange:(NSNotification*)notification;
 @end
 
 #endif /* end of include guard: OAKTEXTVIEW_PRIVATE_H_EKFN2MX9 */

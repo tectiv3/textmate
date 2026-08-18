@@ -697,22 +697,26 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	[client respondToApplyEdit:requestId applied:applied failureReason:applied ? nil : @"No workspace edit provided"];
 }
 
-- (void)lspCodeActions:(id)sender
+- (BOOL)canRequestCodeActions
 {
-	if(!documentView)
-		return;
-
 	OakDocument* doc = self.document;
 	if(!doc)
-		return;
+		return NO;
 
 	auto const settings = settings_for_path(doc.virtualPath ? to_s(doc.virtualPath) : to_s(doc.path), to_s(doc.fileType), to_s(doc.directory ?: @""));
 	if(!settings.get("lspCodeActions", true))
+		return NO;
+
+	return [[LSPManager sharedManager] serverSupportsCodeActionsForDocument:doc];
+}
+
+- (void)lspCodeActions:(id)sender
+{
+	if(!documentView || ![self canRequestCodeActions])
 		return;
 
+	OakDocument* doc = self.document;
 	LSPManager* lsp = [LSPManager sharedManager];
-	if(![lsp serverSupportsCodeActionsForDocument:doc])
-		return;
 
 	ng::range_t sel = documentView->ranges().last();
 	text::pos_t startPos = documentView->convert(sel.min().index);
@@ -737,6 +741,13 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 }
 
 - (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions
+{
+	NSPoint pos = [self positionForWindowUnderCaret];
+	pos = [self convertPoint:[self.window convertRectFromScreen:(NSRect){ pos, NSZeroSize }].origin fromView:nil];
+	[self showCodeActionsMenu:actions atPoint:pos];
+}
+
+- (void)showCodeActionsMenu:(NSArray<NSDictionary*>*)actions atPoint:(NSPoint)point
 {
 	NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Code Actions"];
 	menu.autoenablesItems = NO;
@@ -807,9 +818,7 @@ static NSDictionary<NSString*, NSArray<NSDictionary*>*>* editsFromWorkspaceEdit 
 	addSection(menu, @"Source", sources);
 	addSection(menu, nil, other);
 
-	NSPoint pos = [self positionForWindowUnderCaret];
-	pos = [self convertPoint:[self.window convertRectFromScreen:(NSRect){ pos, NSZeroSize }].origin fromView:nil];
-	[menu popUpMenuPositioningItem:nil atLocation:pos inView:self];
+	[menu popUpMenuPositioningItem:nil atLocation:point inView:self];
 
 	NSEventModifierFlags modifiers = [NSEvent modifierFlags] & (NSEventModifierFlagOption | NSEventModifierFlagCommand);
 	self.showDefinitionCursor = (modifiers == NSEventModifierFlagCommand) && [[LSPManager sharedManager] hasClientForDocument:self.document];

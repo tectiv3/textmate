@@ -376,6 +376,7 @@ BOOL HasDocumentWindow (NSArray* windows)
 						{ /* -------- */ },
 						{ @"Next Diagnostic",                      @selector(lspNextDiagnostic:) },
 						{ @"Previous Diagnostic",                  @selector(lspPrevDiagnostic:) },
+						{ @"Hide Inline Diagnostics",              @selector(toggleInlineDiagnostics:) },
 						{ /* -------- */ },
 						{ @"Debug Panel",                          @selector(toggleLogPanel), .target = [LSPBridge class] },
 					}

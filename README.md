@@ -40,6 +40,9 @@ Use [GitHub Issues](https://github.com/tectiv3/textmate/issues) for bug reports 
 ### LSP
 
 <p align="center">
+  <img src="docs/screenshots/lsp/diagnostics.png" width="640" alt="Inline Diagnostics">
+</p>
+<p align="center">
   <img src="docs/screenshots/lsp/completion-docs.jpg" width="480" alt="Completion with Documentation">
 </p>
 <p align="center">

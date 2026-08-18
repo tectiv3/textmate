@@ -68,6 +68,7 @@ enum OTVFontSmoothing : NSUInteger
 - (IBAction)toggleFoldingAtLine:(NSUInteger)lineNumber recursive:(BOOL)flag;
 - (IBAction)toggleShowInvisibles:(id)sender;
 - (IBAction)toggleScrollPastEnd:(id)sender;
+- (IBAction)toggleInlineDiagnostics:(id)sender;
 
 - (IBAction)saveScratchMacro:(id)sender;
 

@@ -72,6 +72,12 @@ extern NSString* const kUserDefaultsLineNumbersKey;
 extern NSString* const kUserDefaultsLineNumberScaleFactorKey;
 extern NSString* const kUserDefaultsLineNumberFontNameKey;
 
+// =======
+// = LSP =
+// =======
+
+extern NSString* const kUserDefaultsLSPShowInlineDiagnosticsKey;
+
 // ==============
 // = Formatters =
 // ==============

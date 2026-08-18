@@ -36,6 +36,7 @@ extern NSString* const LSPServerStatusDidChangeNotification;
 - (void)executeCommand:(NSString*)command arguments:(NSArray*)arguments forDocument:(OakDocument*)document completion:(void(^)(id))callback;
 - (BOOL)hasClientForDocument:(OakDocument*)document;
 - (NSDictionary<NSString*, NSNumber*>*)diagnosticCountsForDocument:(OakDocument*)document;
+- (NSArray<NSDictionary*>*)diagnosticsForDocument:(OakDocument*)document;
 - (NSString*)serverStatusForDocument:(OakDocument*)document;
 - (NSString*)serverNameForDocument:(OakDocument*)document;
 - (void)restartServerForDocument:(OakDocument*)document;
