@@ -198,6 +198,15 @@ private final class TerminalContainer: NSView {
         focusTerminal()
     }
 
+    /// Arguments for the login shell. nix-darwin's fish setup overwrites PATH from its own list, which drops the
+    /// bundle directory appended to the environment, so fish re-appends it from TM_MCP_SERVER once its startup files have run.
+    nonisolated static func shellLaunchArguments(shell: String, requested: [String]?) -> [String] {
+        if let requested { return requested }
+        guard URL(fileURLWithPath: shell).lastPathComponent == "fish" else { return ["-l"] }
+        let restore = "if set -q TM_MCP_SERVER; set -l d (path dirname $TM_MCP_SERVER); contains -- $d $PATH; or set -gxa PATH $d; end"
+        return ["-l", "--init-command", restore]
+    }
+
     private static func existingDirectory(_ path: String?) -> String {
         var isDirectory: ObjCBool = false
         guard let path, FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else { return NSHomeDirectory() }
@@ -258,7 +267,7 @@ private final class TerminalContainer: NSView {
         for key in Array(environment.keys) where key.hasPrefix("DYLD_") || key == "ASAN_OPTIONS" {
             environment.removeValue(forKey: key)
         }
-        terminal.startProcess(executable: shell, args: shellArguments ?? ["-l"], environment: environment.map { "\($0.key)=\($0.value)" }, currentDirectory: launchDirectory)
+        terminal.startProcess(executable: shell, args: Self.shellLaunchArguments(shell: shell, requested: shellArguments), environment: environment.map { "\($0.key)=\($0.value)" }, currentDirectory: launchDirectory)
     }
 
     // Run before AppKit's key-equivalent search: the editor and global bundle menu

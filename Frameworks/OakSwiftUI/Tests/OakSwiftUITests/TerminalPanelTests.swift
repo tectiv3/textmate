@@ -682,3 +682,25 @@ final class TerminalTestDelegate: NSObject, OakTerminalPanelControllerDelegate {
     func terminalPanelWorkingDirectory(_ panel: OakTerminalPanelController) -> String? { workingDirectory }
     func terminalPanelDidCloseLastSession(_ panel: OakTerminalPanelController) { lastSessionClosed += 1 }
 }
+
+@Test func fishLoginRestoresBundleDirectoryAfterStartupFiles() throws {
+    let fish = OakTerminalPanelController.shellLaunchArguments(shell: "/run/current-system/sw/bin/fish", requested: nil)
+    #expect(fish.prefix(2) == ["-l", "--init-command"])
+    #expect(fish.count == 3 && fish[2].contains("TM_MCP_SERVER"))
+    #expect(OakTerminalPanelController.shellLaunchArguments(shell: "/bin/zsh", requested: nil) == ["-l"])
+    #expect(OakTerminalPanelController.shellLaunchArguments(shell: "/usr/bin/fish", requested: ["-i"]) == ["-i"])
+
+    // The command must behave in the real shell: nix-darwin overwrites PATH, so a login fish has to put the directory back.
+    guard FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/fish") || FileManager.default.isExecutableFile(atPath: "/run/current-system/sw/bin/fish") else { return }
+    let shell = FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/fish") ? "/opt/homebrew/bin/fish" : "/run/current-system/sw/bin/fish"
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: shell)
+    process.arguments = fish + ["-c", "echo $PATH[-1]"]
+    process.environment = ["HOME": NSTemporaryDirectory(), "PATH": "/usr/bin:/bin", "TM_MCP_SERVER": "/Applications/Example Dir/textmate-mcp"]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    try process.run()
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    #expect(String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "/Applications/Example Dir")
+}
