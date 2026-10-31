@@ -36,11 +36,11 @@ Relative paths use the session's shell working directory (queried from macOS, wi
 
 ## Editor context for terminal agents
 
-The bundled MCP server lets an agent query the current file, selected text, open documents, and unsaved buffer contents in its terminal's window. In a new terminal tab, run `tm-codex`, `tm-claude`, or `tm-opencode` to start the corresponding agent with editor context. Each launcher accepts `--check` to test the connection. Other MCP clients can obtain configuration with `"$TM_MCP_SERVER" --print-config`. See [Editor context MCP](editor-context-mcp.md) for setup and tool details.
+The bundled MCP server lets an agent query the current file, selected text, open documents, and unsaved buffer contents in its terminal's window. In a new terminal tab, run `tm-codex`, `tm-claude`, `tm-opencode`, or `tm-pi` to start the corresponding agent with editor context. Each launcher accepts `--check` to test the connection. Other MCP clients can obtain configuration with `"$TM_MCP_SERVER" --print-config`. See [Editor context MCP](editor-context-mcp.md) for setup and tool details.
 
 ## Diagnostics for terminal agents
 
-With an agent running through `tm-codex`, `tm-claude`, or `tm-opencode`, ask it to **“Read TextMate's diagnostics and explain the errors and warnings in this file.”** The `get_diagnostics` tool reads the language-server reports behind the editor's inline diagnostics, including messages, severity, source, codes, and source ranges. Ask for file locations in the response, then Command-click a location to jump to that line.
+With an agent running through `tm-codex`, `tm-claude`, `tm-opencode`, or `tm-pi`, ask it to **“Read TextMate's diagnostics and explain the errors and warnings in this file.”** The `get_diagnostics` tool reads the language-server reports behind the editor's inline diagnostics, including messages, severity, source, codes, and source ranges. Ask for file locations in the response, then Command-click a location to jump to that line.
 
 The tool reports whether diagnostics have been received and whether a server is available, and supports other loaded documents in the same window. Reports are cached and can lag unsaved edits. Terminal build logs are not collected by this tool. See [Using diagnostics](editor-context-mcp.md#using-diagnostics) for paging and status details.
 
@@ -60,7 +60,7 @@ Subscriptions are optional, and there are no background editor queries without a
 
 ## Agent-proposed buffer edits
 
-While chatting with an agent started through `tm-codex`, `tm-claude`, or `tm-opencode`, ask it to propose changes to an open buffer. For example: **“Simplify this function and propose the edits in TextMate for review.”**
+While chatting with an agent started through `tm-codex`, `tm-claude`, `tm-opencode`, or `tm-pi`, ask it to propose changes to an open buffer. For example: **“Simplify this function and propose the edits in TextMate for review.”**
 
 The agent reads the current live text and submits `propose_document_edits`. Review its diff in the **Review Buffer Edits** window and choose **Apply Edits** or **Discard**. This supports unsaved and untitled documents, insertions, replacements, and deletions. Apply groups the changes into one undo action; save the document when ready. If you change the target buffer while the agent works, the stale proposal cannot overwrite your newer edits.
 

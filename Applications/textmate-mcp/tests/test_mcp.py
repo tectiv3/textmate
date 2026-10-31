@@ -512,6 +512,66 @@ class MCPTests(unittest.TestCase):
             self.assertNotIn(environment["TM_CONTEXT_TOKEN"], process.stdout)
 
 
+    def test_pi_launcher_loads_the_extension_and_passes_arguments_through(self):
+        launcher = str(Path(EXECUTABLE).with_name("tm-pi"))
+        extension = Path(EXECUTABLE).with_name("textmate-pi-extension.js")
+        with tempfile.TemporaryDirectory(prefix="tm-pi-", dir="/tmp") as directory:
+            app = Path(directory) / 'app "quoted" 😀'
+            app.mkdir()
+            shutil.copy2(EXECUTABLE, app / "textmate-mcp")
+            shutil.copy2(launcher, app / "tm-pi")
+            stub = Path(directory) / "pi-stub"
+            stub.write_text("#!" + sys.executable + "\nimport json, os, sys\nprint(json.dumps({'args': sys.argv[1:], 'server': os.environ.get('TM_MCP_SERVER')}))\n")
+            stub.chmod(0o700)
+            with context_server(lambda message, _: {"windowId": "w", "documentName": "test"}) as environment:
+                environment["TM_PI_COMMAND"] = str(stub)
+                def run(*arguments):
+                    return subprocess.run([str(app / "tm-pi"), *arguments], cwd=directory, env=environment,
+                                          text=True, capture_output=True, timeout=5)
+                # Without the extension beside it the launcher must refuse, not start pi unconfigured.
+                missing = run("prompt")
+                self.assertEqual(missing.returncode, 1)
+                self.assertIn("extension is missing", missing.stderr)
+
+                shutil.copy2(extension, app / "textmate-pi-extension.js")
+                process = run("--model", "example", "--", "prompt with spaces")
+                self.assertEqual(process.returncode, 0, process.stderr)
+                actual = json.loads(process.stdout)
+                self.assertEqual(actual["args"], ["--extension", str((app / "textmate-pi-extension.js").resolve()),
+                                                  "--model", "example", "--", "prompt with spaces"])
+                self.assertEqual(actual["server"], str((app / "textmate-mcp").resolve()))
+                self.assertNotIn(environment["TM_CONTEXT_TOKEN"], process.stdout)
+
+                # Subcommands do not load extensions, and an option before one would read as a prompt.
+                for arguments in (["mcp", "list"], ["install", "npm:example"], ["list"]):
+                    self.assertEqual(json.loads(run(*arguments).stdout)["args"], arguments)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required to evaluate the pi extension")
+    def test_pi_extension_registers_the_server_without_embedding_credentials(self):
+        import base64
+        source = Path(EXECUTABLE).with_name("textmate-pi-extension.js").read_text(encoding="utf-8")
+        encoded = base64.b64encode(source.encode()).decode()
+        script = ("const registered = [];"
+                  f"const extension = (await import('data:text/javascript;base64,{encoded}')).default;"
+                  "extension({ registerMcpServer: (name, config) => registered.push({ name, config }) });"
+                  "console.log(JSON.stringify(registered));")
+        def evaluate(server):
+            environment = dict(os.environ, TM_CONTEXT_TOKEN="secret-test-token")
+            environment.pop("TM_MCP_SERVER", None)
+            if server: environment["TM_MCP_SERVER"] = server
+            process = subprocess.run(["node", "--input-type=module", "-e", script], env=environment,
+                                     text=True, capture_output=True, timeout=10)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertNotIn("secret-test-token", process.stdout)
+            return json.loads(process.stdout)
+        registered = evaluate("/app/textmate-mcp")
+        self.assertEqual([entry["name"] for entry in registered], ["textmate"])
+        config = registered[0]["config"]
+        self.assertEqual(config["command"], "/app/textmate-mcp")
+        self.assertEqual(config["env"], {key: "${%s}" % key for key in ("TM_CONTEXT_SOCKET", "TM_CONTEXT_SESSION", "TM_CONTEXT_TOKEN")})
+        self.assertEqual(config["exposure"], "direct")
+        self.assertEqual(evaluate(None), [], "without a helper path nothing may be registered")
+
     def test_claude_launcher_arguments_connection_and_credentials(self):
         launcher = str(Path(EXECUTABLE).with_name("tm-claude"))
         with tempfile.TemporaryDirectory(prefix="tm-claude-", dir="/tmp") as directory:

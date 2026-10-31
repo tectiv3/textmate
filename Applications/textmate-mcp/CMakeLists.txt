@@ -7,6 +7,11 @@ add_executable(tm-claude src/claude-launcher.mm)
 target_link_libraries(tm-claude PRIVATE "-framework Foundation")
 add_executable(tm-opencode src/opencode-launcher.mm)
 target_link_libraries(tm-opencode PRIVATE "-framework Foundation")
+add_executable(tm-pi src/pi-launcher.mm)
+target_link_libraries(tm-pi PRIVATE "-framework Foundation")
+# In the app bundle the extension is a Resources file; in a build tree it sits beside the launcher.
+add_custom_command(TARGET tm-pi POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/resources/textmate-pi-extension.js" "$<TARGET_FILE_DIR:tm-pi>/textmate-pi-extension.js")
 
 if(BUILD_TESTING)
   find_package(Python3 COMPONENTS Interpreter QUIET)

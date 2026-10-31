@@ -18,9 +18,838 @@
 
 <div>
 
+<h3 class="commit-group-heading">Oct 31, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/131ad70694da429ea69105cf0d698578cdf39ed6" class="message">Address review findings on the terminal/MCP merge</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>MCP stdio: stdout writes carry no deadline, and a failed or partial write exits because a torn JSON-RPC frame cannot resynchronize. Oversized or unencodable responses now get a JSON-RPC error. wait_for fails on non-EINTR poll errors instead of spinning, and the context listener backs off on EMFILE/ENFILE.
+
+Single sources of truth: one revision function on EditorContextService, and one tool registry in EditorContextProtocol.h that drives tools/list, the tools/call allow-list, validation and dispatch. Schema identifier limits now match the validator. The drift test compares tools/list with the compiled registry instead of parsing source.
+
+Project changes: locate git through scm::find_executable (TM_GIT, PATH, shim check) instead of /usr/bin/git, kill git once the output cap is hit, and follow the window&#39;s project directory.
+
+Also: resolve navigation paths once for check and open, evict the oldest edit proposal, bounds-check tab status accessors, append the bundle directory to the terminal PATH, remove the unreachable tab rename code and the dead HTML output CSS injection.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/131ad70694da429ea69105cf0d698578cdf39ed6" class="gobutton">
+          <span class="sha">131ad70694<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/131ad70694da429ea69105cf0d698578cdf39ed6" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T13:48:57Z" title="2026-10-31 13:48:57">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/22f747c9a80ed05401ec3515f374d85b32eed35b" class="message">Merge pull request #21 from alistair-king/ak/terminal-2</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>Add terminal agent integration and editor context through MCP
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/22f747c9a80ed05401ec3515f374d85b32eed35b" class="gobutton">
+          <span class="sha">22f747c9a8<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/22f747c9a80ed05401ec3515f374d85b32eed35b" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T12:15:01Z" title="2026-10-31 12:15:01">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/41122d39afe12854b0a6e762e6bc11ac0adbfc59" class="message">Pin the MCP tool surface against silent drift</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>Three hand-maintained lists have to agree: the description table in main.mm,
+the tools/call allow-list, and the validate_arguments branches in
+EditorContextProtocol.h. Drift is silent in every direction — a name missing
+from the allow-list is unreachable, a name missing from validate_arguments
+answers &quot;Unknown tool&quot;, and a stale validation branch goes unnoticed.
+
+The test compares the extracted names in both directions and asks a small
+helper, built against the header, which names the compiled branches actually
+accept, so the verdict on validate_arguments never comes from re-parsing its
+source. Two names are legitimately not tools: get_connection_status serves
+--check and get_editor_change_token serves resource subscriptions, so a plain
+three-way equality would be wrong; the exception is encoded and the internal
+names are asserted present so extraction cannot silently shrink.
+
+Verified by mutation: rejecting get_hover in validate_arguments fails three
+tests including this one, and restoring it returns the suite to green.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/41122d39afe12854b0a6e762e6bc11ac0adbfc59" class="gobutton">
+          <span class="sha">41122d39af<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/41122d39afe12854b0a6e762e6bc11ac0adbfc59" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T12:04:28Z" title="2026-10-31 12:04:28">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/36e9f418fe7233686924c77bc2f1169e1a4a3796" class="message">Fix the editor-context defects the review found</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>ProjectChangesSnapshot spawned four git processes per refresh, each with its
+own 10 s deadline plus a 5 s timer on top, so the list could stay stale for
+40 s. `rev-parse --show-toplevel --verify HEAD` covers the root and the HEAD
+oid, and `status --porcelain=v1 -z --branch` covers the status entries and
+the branch name; one process is not reachable because neither porcelain
+format carries the work-tree root. The 10 ms sleepForTimeInterval: poll is
+replaced by a readability source on the pipe, with one absolute deadline
+shared by the read and the exit wait. Worst case is now 20 s, still off the
+main thread.
+
+A repository rooted at &quot;/&quot; produced the prefix &quot;//&quot;, which no absolute path
+has, so no unsaved buffer ever matched a changed file; a component-boundary
+predicate replaces the string concatenation.
+
+write_json could only report failure, not why, and the service answered by
+closing the socket with no bytes, which the client sees as invalid_response.
+It now returns whether the payload was over message_limit, unencodable, or
+failed to send, along with its size, and the service logs that.
+
+The session and token strings were compared without any bound, so a request
+carrying a message_limit-sized token was dereferenced against the
+registration table; both are now capped before the lookup.
+
+The docs claimed a capability boundary the token does not provide. Measured:
+ps -E on a terminal child prints the token, descendants inherit it, and a
+root-owned pid shows nothing, so a 0600 token file would not change the
+exposure. The boundary is the user account.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/36e9f418fe7233686924c77bc2f1169e1a4a3796" class="gobutton">
+          <span class="sha">36e9f418fe<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/36e9f418fe7233686924c77bc2f1169e1a4a3796" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T12:04:23Z" title="2026-10-31 12:04:23">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/2c17435571ae9955447b0bcc305a684b669aee2c" class="message">Pin the editor change journal to its window</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>EditorContextChanges is a window ivar (DocumentWindowController.mm:115,
+created at :469) and get_editor_changes answers from self.editorChanges
+(:228), so every session registered against a window shares one event
+sequence and its 128-event cap.
+
+The new test registers two distinct sessions against one window. Two
+untouched sessions return byte-identical cursors; the second session resumes
+from the first session&#39;s cursor and sees the document switch and content edit
+without a reset; and after one shared flood of records, both sessions retire
+the same cursor and then receive exactly the 127 events that fit behind it in
+a 128-slot history. Events carry type and documentId only, so the journal
+cannot attribute an event to the session that caused it.
+
+Limits: the shared instance is asserted through behaviour (identical cursors,
+cross-session resume, identical retention), not by comparing pointers to the
+window&#39;s private ivar.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/2c17435571ae9955447b0bcc305a684b669aee2c" class="gobutton">
+          <span class="sha">2c17435571<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/2c17435571ae9955447b0bcc305a684b669aee2c" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:48:59Z" title="2026-10-31 10:48:59">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/f8a63f2a250627ee406d796cab792d537185e2b9" class="message">Pin context snapshots against later edits</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>context_buffer_t keeps raw (data, size) pointers into the storage tree and
+dereferences them on a worker thread, so a snapshot is only safe while the
+tree shares storage copy-on-write and later edits stay outside the captured
+extents. Nothing stated that invariant; nothing tested it.
+
+The new test records a snapshot of multibyte text (astral plus non-ASCII BMP),
+then runs 120 rounds of append, mid-buffer insert, range replace, range delete
+and whole-buffer replace on main while a worker reads the snapshot, and asserts
+the bytes and UTF-16 length still match the recorded original. Repeat reads and
+an astral-character offset probe follow.
+
+Limits: without Thread Sanitizer this pins copy semantics under later mutation,
+not the absence of a data race. The parse-during-read lead could not be
+exercised: the test process loads no bundle grammar, so document.buffer has no
+grammar and wait_for_repair returns before taking the grammar mutex (the test
+logs &quot;without grammar&quot;).
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/f8a63f2a250627ee406d796cab792d537185e2b9" class="gobutton">
+          <span class="sha">f8a63f2a25<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/f8a63f2a250627ee406d796cab792d537185e2b9" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:48:54Z" title="2026-10-31 10:48:54">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/e3187d3a0545efb096f5fb4eba8beef6f714810e" class="message">Close the gaps the branch turned up: version, waits, snapshot identity, encoding</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>Four unrelated small defects, each with a test or a measurement behind it:
+
+- serverInfo advertised the literal &quot;1.7.0&quot; while the application&#39;s version is
+  TEXTMATE_VERSION, parsed from git describe, so the helper published a second
+  version identity no build step updated. Pass it as a compile definition and
+  fall back to &quot;unknown&quot;; the helper is a bare Mach-O with Info.plist not
+  bound, so NSBundle is not a reliable source.
+- The navigation test gave work that hops through the main queue one second,
+  which is not enough when the rest of the suite competes for that queue.
+- bufferForDocument:revision: returned a copy of current content labelled with
+  the revision its caller asked for. It now returns nil rather than describe
+  itself wrongly, and a test pins that an undo rewinding buffer.revision()
+  cannot revive a proposal, because the label carries contentGeneration.
+- A test covers the LSP position-encoding gate: a server advertising anything
+  other than utf-16 receives no language queries at all, rather than positions
+  mapped through the wrong units.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/e3187d3a0545efb096f5fb4eba8beef6f714810e" class="gobutton">
+          <span class="sha">e3187d3a05<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/e3187d3a0545efb096f5fb4eba8beef6f714810e" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:41:46Z" title="2026-10-31 10:41:46">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/5f3f1d79a3e1cecc61f57a67181bbb8e29f5a873" class="message">Constrain navigate_editor to the window&#39;s project root</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>The terminal token proves only which window a request belongs to, but
+navigate_editor opened any absolute path the user could read and read_document
+then served the buffer. Reproduced on a running build: /etc/hosts opened as a
+tab and its contents came back, while projectPath stayed the repository.
+
+A path is now accepted only when it resolves, symlinks included, to the
+project directory or below it on a component boundary, so /project2 no longer
+matches /project; anything else fails with path_outside_project before the stat
+or any tab exists. Documents already open in the window stay navigable, and a
+window with no project directory only navigates to those. The tool description
+and docs/editor-context-mcp.md state the rule.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/5f3f1d79a3e1cecc61f57a67181bbb8e29f5a873" class="gobutton">
+          <span class="sha">5f3f1d79a3<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/5f3f1d79a3e1cecc61f57a67181bbb8e29f5a873" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:41:46Z" title="2026-10-31 10:41:46">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/49b552720d7a6a27caa06fb2d78866d63d06c85b" class="message">Make the context buffer&#39;s byte and UTF-16 walks agree</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>byte_at() classified each byte by its own value while consume() treated bytes
+0x80-0xBF as continuations that carry no unit, so the two translations
+disagreed: a stray continuation byte cost one byte and no unit in one walk and
+two bytes and one unit in the other. Agent-supplied offsets then addressed
+different bytes than read_document reported, and a paged read could return a
+nextOffset equal to the offset it was given.
+
+byte_at() now steps through the same consume(), so one rule governs both
+directions. Behaviour for well-formed UTF-8 is unchanged: 1 byte per unit for
+ASCII, 2-3 for BMP sequences, 4 bytes for the 2 units of an astral character.
+The regression test inserts stray bytes into a loaded buffer directly, because
+the open path rejects undecodable content.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/49b552720d7a6a27caa06fb2d78866d63d06c85b" class="gobutton">
+          <span class="sha">49b552720d<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/49b552720d7a6a27caa06fb2d78866d63d06c85b" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:41:45Z" title="2026-10-31 10:41:45">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/aadb314c13cdd68bb50ebdf904c4c167424980be" class="message">Make the new MCP and terminal-panel tests runnable and honest</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>Three defects in the tests this branch adds, each hiding a real failure:
+
+- test_mcp.py imported tomllib at module scope, so on the Python 3.9 that
+  ships with Xcode the suite raised at import and ran zero tests. Guard the
+  import and skip only the Codex-TOML assertion that needs it.
+- t_terminal_panel.mm looked for the status spinner two levels below the tab
+  and asserted an 18 pt superview. Production adds the spinner directly to the
+  tab and constrains it to 14x14, so the test could never pass.
+- That test then read AppKit&#39;s private _isAnimating to decide whether the
+  spinner was running. Count calls to the public -startAnimation: and
+  -stopAnimation: instead, which is the contract updateStatus implements and
+  which cannot call through a NULL IMP if AppKit changes.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/aadb314c13cdd68bb50ebdf904c4c167424980be" class="gobutton">
+          <span class="sha">aadb314c13<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/aadb314c13cdd68bb50ebdf904c4c167424980be" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:41:45Z" title="2026-10-31 10:41:45">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/9631c397b6d2d45d830b0abe143b7998c0104ce3" class="message">Fix the default build: context tests call a committed terminal API</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>t_editor_context.mm called -startTerminalInDirectory:, a selector that was
+never committed: TerminalPanelViewController offers -startTerminal plus a
+terminalDirectoryProvider block. Because that file is part of
+EditorContext_tests, the default build stopped at [427/469] and none of the
+PR&#39;s new tests could compile at all.
+
+Express the same intent with the API the header does expose: set the provider
+to return a directory, then start the terminal.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/9631c397b6d2d45d830b0abe143b7998c0104ce3" class="gobutton">
+          <span class="sha">9631c397b6<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/9631c397b6d2d45d830b0abe143b7998c0104ce3" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-31T10:41:45Z" title="2026-10-31 10:41:45">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/b4ca7e1f265f39b4fcbd64edb0f56fd55af9f3ba" class="message">Keep terminal panel toggle available from terminal focus</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/b4ca7e1f265f39b4fcbd64edb0f56fd55af9f3ba" class="gobutton">
+          <span class="sha">b4ca7e1f26<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/b4ca7e1f265f39b4fcbd64edb0f56fd55af9f3ba" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-31T08:56:43+11:00" title="2026-10-31 08:56:43">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/b7bf8c115320d0195800ee528e9f13d79f2f995b" class="message">Remove Explain Selection and Fix Selection workflows</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/b7bf8c115320d0195800ee528e9f13d79f2f995b" class="gobutton">
+          <span class="sha">b7bf8c1153<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/b7bf8c115320d0195800ee528e9f13d79f2f995b" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-31T07:19:12+11:00" title="2026-10-31 07:19:12">October 31, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 29, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/344621f1377c06de88f880251fdba176949ed17a" class="message">Reimplement renameSession change from other commit</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/344621f1377c06de88f880251fdba176949ed17a" class="gobutton">
+          <span class="sha">344621f137<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/344621f1377c06de88f880251fdba176949ed17a" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-29T18:59:28+11:00" title="2026-10-29 18:59:28">October 29, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 27, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/b73b9499d4380529294297202bbceaccf8084e94" class="message">Tweaks to tab appearance</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/b73b9499d4380529294297202bbceaccf8084e94" class="gobutton">
+          <span class="sha">b73b9499d4<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/b73b9499d4380529294297202bbceaccf8084e94" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-27T16:36:21+11:00" title="2026-10-27 16:36:21">October 27, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 26, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/e1077c59e5c9263762984ffc8469c42a172fd15a" class="message">Display agent status in tab title</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/e1077c59e5c9263762984ffc8469c42a172fd15a" class="gobutton">
+          <span class="sha">e1077c59e5<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/e1077c59e5c9263762984ffc8469c42a172fd15a" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-26T17:59:44+11:00" title="2026-10-26 17:59:44">October 26, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 25, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/d53cfc6c8b20bcacb7e1f1c2973df881028d1e66" class="message">Allow agents to propse changes to files</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/d53cfc6c8b20bcacb7e1f1c2973df881028d1e66" class="gobutton">
+          <span class="sha">d53cfc6c8b<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/d53cfc6c8b20bcacb7e1f1c2973df881028d1e66" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-25T18:54:54+11:00" title="2026-10-25 18:54:54">October 25, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/6cee0fae4eae7212f4f8cef6c43aceb2d2f0148c" class="message">Expose LSP functions to MCP</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/6cee0fae4eae7212f4f8cef6c43aceb2d2f0148c" class="gobutton">
+          <span class="sha">6cee0fae4e<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/6cee0fae4eae7212f4f8cef6c43aceb2d2f0148c" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-25T18:19:55+11:00" title="2026-10-25 18:19:55">October 25, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/ea856eb03cbdc290ae33c5a37a37d8e055ea5e9a" class="message">Implement fix this, and approve change</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/ea856eb03cbdc290ae33c5a37a37d8e055ea5e9a" class="gobutton">
+          <span class="sha">ea856eb03c<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/ea856eb03cbdc290ae33c5a37a37d8e055ea5e9a" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-25T18:01:14+11:00" title="2026-10-25 18:01:14">October 25, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 24, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/bc5feb7efef801dbe2b8f9c06e9f1ac2018d9452" class="message">Tweek to terminal colors</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/bc5feb7efef801dbe2b8f9c06e9f1ac2018d9452" class="gobutton">
+          <span class="sha">bc5feb7efe<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/bc5feb7efef801dbe2b8f9c06e9f1ac2018d9452" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T13:22:48+11:00" title="2026-10-24 13:22:48">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/86ce3611b659a9a5f465511b7d0edce80bb8a353" class="message">Fix project restoration with the terminal panel</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>Host the project layout inside a container so NSSplitView cannot impose a stale required frame size while project restoration adds the file browser. Keep the container size preferences optional so required browser constraints can establish the new minimum before the next split-view resize.
+
+Add a regression that fails with the original implementation and pin the existing layout test geometry independently of saved user defaults.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/86ce3611b659a9a5f465511b7d0edce80bb8a353" class="gobutton">
+          <span class="sha">86ce3611b6<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/86ce3611b659a9a5f465511b7d0edce80bb8a353" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T08:35:41+11:00" title="2026-10-24 08:35:41">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/bf03e545635fb291596b43325b76cd4fbbb250b3" class="message">Implements follow editor changes</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/bf03e545635fb291596b43325b76cd4fbbb250b3" class="gobutton">
+          <span class="sha">bf03e54563<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/bf03e545635fb291596b43325b76cd4fbbb250b3" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T08:07:17+11:00" title="2026-10-24 08:07:17">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/7cc8bd0608e1bcd2b3d47fda6c8f1291fd167b9a" class="message">Allow the AI to navigate the editor</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/7cc8bd0608e1bcd2b3d47fda6c8f1291fd167b9a" class="gobutton">
+          <span class="sha">7cc8bd0608<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/7cc8bd0608e1bcd2b3d47fda6c8f1291fd167b9a" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T07:54:42+11:00" title="2026-10-24 07:54:42">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/b3912b9a8bf38ce24c9609e0aa8101a2c04154d9" class="message">Add diagnostics access</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/b3912b9a8bf38ce24c9609e0aa8101a2c04154d9" class="gobutton">
+          <span class="sha">b3912b9a8b<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/b3912b9a8bf38ce24c9609e0aa8101a2c04154d9" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T07:41:41+11:00" title="2026-10-24 07:41:41">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/932fa130ff5dd2867e1e75b1ee841be88982336e" class="message">Diagnostics access</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/932fa130ff5dd2867e1e75b1ee841be88982336e" class="gobutton">
+          <span class="sha">932fa130ff<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/932fa130ff5dd2867e1e75b1ee841be88982336e" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T07:38:01+11:00" title="2026-10-24 07:38:01">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/68e113ea99d7617c13a2fc64f620ac697549ba19" class="message">Add explain code feature</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/68e113ea99d7617c13a2fc64f620ac697549ba19" class="gobutton">
+          <span class="sha">68e113ea99<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/68e113ea99d7617c13a2fc64f620ac697549ba19" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T07:29:47+11:00" title="2026-10-24 07:29:47">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/3d30f43e07b50eb415bcf5b9b427032b5f5adafc" class="message">Add Opencode wrapper</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/3d30f43e07b50eb415bcf5b9b427032b5f5adafc" class="gobutton">
+          <span class="sha">3d30f43e07<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/3d30f43e07b50eb415bcf5b9b427032b5f5adafc" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-24T06:40:12+11:00" title="2026-10-24 06:40:12">October 24, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
+<h3 class="commit-group-heading">Oct 23, 2026</h3>
+
+<ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/39218510c5085b013738bbac0a95f0e8bdca13af" class="message">Add support for claude</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/39218510c5085b013738bbac0a95f0e8bdca13af" class="gobutton">
+          <span class="sha">39218510c5<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/39218510c5085b013738bbac0a95f0e8bdca13af" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-23T21:39:21+11:00" title="2026-10-23 21:39:21">October 23, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/78d09f183c845938d530fc91d135600145d0fc0c" class="message">Initial implementation of MCP</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/78d09f183c845938d530fc91d135600145d0fc0c" class="gobutton">
+          <span class="sha">78d09f183c<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/78d09f183c845938d530fc91d135600145d0fc0c" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-23T21:05:12+11:00" title="2026-10-23 21:05:12">October 23, 2026</time>
+      </div>
+    </div>
+</li>
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/f68ce53cfda9ae851deba86069a8ed85?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/01ce87ccf6cec9c13b8d00ab7e9b106e45ea6580" class="message">Fix Ctrl+K going to the editor instead of the terminal</a>
+      
+    </p>
+    <div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/01ce87ccf6cec9c13b8d00ab7e9b106e45ea6580" class="gobutton">
+          <span class="sha">01ce87ccf6<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/01ce87ccf6cec9c13b8d00ab7e9b106e45ea6580" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name">Alistair King</span>
+        authored <time class="js-relative-date" datetime="2026-10-23T19:48:08+11:00" title="2026-10-23 19:48:08">October 23, 2026</time>
+      </div>
+    </div>
+</li>
+
+</ol>
+
 <h3 class="commit-group-heading">Oct 30, 2026</h3>
 
 <ol class="commit-group">
+
+<li class="commit commit-group-item">
+    <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">
+    <p class="commit-title">
+      <a href="https://github.com/tectiv3/textmate/commit/bf43765150dbd0e1aa5b622bb8129111ac32f430" class="message">Explain the terminal attention dot on hover</a>
+        <span class="hidden-text-expander inline"><a href="javascript:;" class="js-details-target">…</a></span>
+</p>
+<div class="commit-desc"><pre>The dot is the tab&#39;s close button, so hovering it said nothing at all:
+OakTabView derives its tooltip from tabItem.path, which a terminal tab
+leaves empty on purpose since the path also feeds the drag pasteboard and
+the overflow menu icon.
+
+Give the tab bar an optional tooltip source instead, falling back to the
+path so document tabs keep the tooltip they have. The terminal answers
+with the reason the dot is lit, keeping that vocabulary next to the
+subtitle strings it already shares.
+</pre></div>
+<div class="commit-meta">
+      <div class="commit-links">
+        <a href="https://github.com/tectiv3/textmate/commit/bf43765150dbd0e1aa5b622bb8129111ac32f430" class="gobutton">
+          <span class="sha">bf43765150<span class="mini-icon mini-icon-arr-right-mini"></span></span>
+        </a>
+        <a href="https://github.com/tectiv3/textmate/tree/bf43765150dbd0e1aa5b622bb8129111ac32f430" class="browse-button" title="Browse the code at this point in the history" rel="nofollow">Browse code <span class="mini-icon mini-icon-arr-right"></span></a>
+      </div>
+      <div class="authorship">
+        <span class="author-name"><a href="https://github.com/tectiv3">tectiv3</a></span>
+        authored <time class="js-relative-date" datetime="2026-10-30T08:38:14Z" title="2026-10-30 08:38:14">October 30, 2026</time>
+      </div>
+    </div>
+</li>
 
 <li class="commit commit-group-item">
     <img class="gravatar" src="https://www.gravatar.com/avatar/e904dfc2f19fa297256c24c2a620c629?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" height="36" width="36">

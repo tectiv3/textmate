@@ -102,6 +102,7 @@ file(GLOB _fw_res
   "${CMAKE_SOURCE_DIR}/Frameworks/DocumentWindow/resources/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.html"
   "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.js"
+  "${CMAKE_SOURCE_DIR}/Applications/textmate-mcp/resources/*.js"
   "${CMAKE_SOURCE_DIR}/Frameworks/scm/resources/*.xslt"
 )
 target_sources(TextMate PRIVATE ${_fw_res})
@@ -134,6 +135,7 @@ textmate_embed(TextMate textmate-mcp "MacOS")
 textmate_embed(TextMate tm-codex "MacOS")
 textmate_embed(TextMate tm-claude "MacOS")
 textmate_embed(TextMate tm-opencode "MacOS")
+textmate_embed(TextMate tm-pi "MacOS")
 textmate_embed(TextMate tm_query "MacOS")
 textmate_embed(TextMate PrivilegedTool "Resources")
 
@@ -145,6 +147,8 @@ textmate_embed(TextMate Dialog2 "PlugIns" DIRECTORY)
 textmate_embed(TextMate TextMateQL "Library/QuickLook" DIRECTORY)
 
 # Sign embedded binaries (inner-to-outer, before app signature)
+textmate_codesign_file(TextMate "${CS_IDENTITY}"
+  "$<TARGET_BUNDLE_DIR:TextMate>/Contents/MacOS/tm-pi")
 textmate_codesign_file(TextMate "${CS_IDENTITY}"
   "$<TARGET_BUNDLE_DIR:TextMate>/Contents/MacOS/tm-opencode")
 textmate_codesign_file(TextMate "${CS_IDENTITY}"

@@ -1,6 +1,6 @@
 # Querying TextMate from a terminal agent
 
-TextMate bundles an editor MCP server, `textmate-mcp`, and launchers for Codex (`tm-codex`), Claude Code (`tm-claude`), and OpenCode (`tm-opencode`). Agents can query live editor buffers, including unsaved changes and untitled documents. Queries stay within the window owning the terminal session, even while the terminal has keyboard focus. Moving a terminal to another window updates its context without restarting the agent.
+TextMate bundles an editor MCP server, `textmate-mcp`, and launchers for Codex (`tm-codex`), Claude Code (`tm-claude`), OpenCode (`tm-opencode`), and pi (`tm-pi`). Agents can query live editor buffers, including unsaved changes and untitled documents. Queries stay within the window owning the terminal session, even while the terminal has keyboard focus. Moving a terminal to another window updates its context without restarting the agent.
 
 ## Start Codex
 
@@ -68,12 +68,35 @@ The launcher searches PATH, `~/.opencode/bin/opencode`, `~/.local/bin/opencode`,
 
 Use `tm-opencode --check` to test the editor connection without starting OpenCode. Commands that attach to an already running remote OpenCode server use that server's configuration; start a local OpenCode session for this terminal's editor context.
 
+## Start pi
+
+Install [pi](https://pi.dev), open a new TextMate terminal tab, and run:
+
+```sh
+tm-pi
+# Or run a prompt without the terminal UI:
+tm-pi -p "Explain the selected text in TextMate"
+```
+
+pi has no inline MCP configuration, so the launcher loads a bundled extension (`pi --extension`) that registers the `textmate` server for this session only. Your `mcp.json`, settings, and other extensions are untouched, and the connection credentials stay in environment variables. The tools are declared to the model directly as `mcp__textmate__*` rather than hidden behind codemode. Arguments are forwarded. pi's subcommands (`install`, `remove`, `uninstall`, `update`, `list`, `config`, `auth`, `mcp`) run unchanged, without the extension.
+
+A server named `textmate` in your own `mcp.json` takes precedence over the registration, and an installed extension that replaces pi's built-in MCP support, such as `pi-mcp-adapter`, stops it from connecting.
+
+The launcher searches PATH, `~/.local/bin/pi`, and common Homebrew locations. Set `TM_PI_COMMAND` to an explicit executable path for another installation. To launch by full path when shell startup files replace PATH:
+
+```sh
+"${TM_MCP_SERVER%/*}/tm-pi"
+```
+
+Use `tm-pi --check` to test the editor connection without starting pi.
+
 ## Check the connection
 
 ```sh
 tm-codex --check
 tm-claude --check
 tm-opencode --check
+tm-pi --check
 # or:
 "$TM_MCP_SERVER" --check
 ```
