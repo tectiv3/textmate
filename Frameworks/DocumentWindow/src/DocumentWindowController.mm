@@ -110,6 +110,7 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 @property (nonatomic) BOOL                         terminalOnlyWindow; // created by detaching a terminal tab; closes with its last session while the placeholder document is untouched
 @property (nonatomic) EditReviewWindowController* editReviewController;
 @property (nonatomic) NSMutableDictionary<NSString*, BufferEditProposal*>* editProposals;
+@property (nonatomic) NSMutableArray<NSString*>* editProposalOrder;
 @property (nonatomic) ProjectChangesWindowController* projectChangesController;
 @property (nonatomic) NSUInteger editorNavigationGeneration;
 @property (nonatomic) EditorContextChanges* editorChanges;
@@ -207,14 +208,14 @@ static NSDictionary* ContextDocument(OakDocument* document)
               @"language": document.fileType ?: @"",
               @"modified": @(document.isDocumentEdited),
               @"loaded": @(document.isLoaded),
-              @"revision": document.isLoaded ? [NSString stringWithFormat:@"%zu:%lu", [document buffer].revision(), (unsigned long)[EditorContextService.sharedService contentGenerationForDocument:document]] : (id)NSNull.null };
+              @"revision": document.isLoaded ? [EditorContextService.sharedService revisionForDocument:document] : (id)NSNull.null };
 }
 
 - (EditorContextSnapshot*)editorContextForMethod:(NSString*)method arguments:(NSDictionary*)arguments
 {
     if(NSString* error = editor_context::validate_arguments(method, arguments))
         return [EditorContextSnapshot response:editor_context::failure(error, @"invalid_arguments")];
-    if([@[@"get_definition", @"find_references", @"get_document_symbols", @"search_workspace_symbols", @"get_hover"] containsObject:method]) {
+    if(editor_context::is_language_query(method)) {
         if(!self.languageIntelligence) self.languageIntelligence = [[EditorLanguageIntelligence alloc] init];
         __weak DocumentWindowController* owner = self;
         return [self.languageIntelligence snapshotForMethod:method arguments:arguments documents:^NSArray*{ return owner.documents; }
@@ -322,9 +323,12 @@ static NSDictionary* ContextDocument(OakDocument* document)
 				if(!proposal) { completion(editor_context::failure(error ?: @"The edit proposal could not be prepared.", @"invalid_proposal")); return; }
 				if(controller.editReviewController || controller.window.attachedSheet || !controller.window.isVisible) { completion(editor_context::failure(@"The editor cannot show a review now. Try again after closing its current review or dialog.", @"review_unavailable")); return; }
 				if(!canCommit()) { completion(editor_context::failure(@"The proposal expired before review.", @"proposal_cancelled")); return; }
-				if(!controller.editProposals) controller.editProposals = [NSMutableDictionary dictionary];
-				if(controller.editProposals.count >= 8) [controller.editProposals removeObjectForKey:controller.editProposals.allKeys.firstObject];
+				if(!controller.editProposals) { controller.editProposals = [NSMutableDictionary dictionary]; controller.editProposalOrder = [NSMutableArray array]; }
+				// Evict the oldest: its outcome has been seen longest, whereas an arbitrary victim could be
+				// the decision the agent is about to poll for. Only one review is open at a time, so it is never pending.
+				if(controller.editProposals.count >= 8) { [controller.editProposals removeObjectForKey:controller.editProposalOrder.firstObject]; [controller.editProposalOrder removeObjectAtIndex:0]; }
 				controller.editProposals[proposal.identifier] = proposal;
+				[controller.editProposalOrder addObject:proposal.identifier];
 				controller.editReviewController = [proposal reviewControllerWithCompletion:^(NSModalResponse response){
 					DocumentWindowController* owner = weakSelf;
 					owner.editReviewController = nil;
@@ -369,6 +373,8 @@ static NSDictionary* ContextDocument(OakDocument* document)
         NSUInteger generation = ++controller.editorNavigationGeneration;
         BOOL (^canCommit)(void) = ^{ return authorized() && [weakSelf.identifier isEqual:owner] && weakSelf.editorNavigationGeneration == generation; };
         NSString* path = [arguments[@"path"] stringByStandardizingPath];
+        // Check, stat and open the same resolved path so a symlink swapped in afterwards cannot redirect the open.
+        NSString* resolvedPath = [path stringByResolvingSymlinksInPath];
         OakDocument* target = nil;
         for(OakDocument* candidate in controller.documents) {
             if((arguments[@"documentId"] && [candidate.identifier.UUIDString isEqual:arguments[@"documentId"]]) ||
@@ -378,7 +384,7 @@ static NSDictionary* ContextDocument(OakDocument* document)
         // Opening a tab makes the buffer readable through the context tools, so the
         // agent cannot widen its own reach beyond the window's project. Documents
         // the user already opened stay navigable wherever they live.
-        if(path && !target && ![controller navigationPathIsInsideProject:path]) {
+        if(path && !target && ![controller navigationPathIsInsideProject:resolvedPath]) {
             NSString* message = controller.projectPath ? @"The path is outside this window's project directory." : @"The path is not open in this window, which has no project directory.";
             completion(editor_context::failure(message, @"path_outside_project"));
             return;
@@ -387,7 +393,7 @@ static NSDictionary* ContextDocument(OakDocument* document)
             [controller loadNavigationDocument:target arguments:arguments deadline:deadline canCommit:canCommit completion:completion];
             return;
         }
-        NSString* file = target.path ?: path;
+        NSString* file = target.path ?: resolvedPath;
         if(!file) { completion(editor_context::failure(@"The document cannot be loaded.", @"document_unavailable")); return; }
         // File metadata and buffer indexing stay off the UI thread. Never create
         // a missing file or interpret a directory, device, or FIFO as a document.
@@ -2398,6 +2404,7 @@ static NSDictionary* ContextDocument(OakDocument* document)
 			[weakSelf openItems:@[@{ @"path": path, @"selectionString": [NSString stringWithFormat:@"%lu:1", (unsigned long)line] }] closingOtherTabs:NO activate:YES];
 		}];
 	}
+	self.projectChangesController.directory = self.projectPath ?: self.terminalStartDirectory;
 	[self.projectChangesController showWindow:sender];
 }
 

@@ -7,17 +7,40 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <chrono>
+#include <limits>
 
 // Private, bounded, one-request-per-connection protocol. MCP itself uses stdio.
 namespace editor_context {
 constexpr size_t message_limit = 1024 * 1024;
 constexpr double request_timeout = 3;
+constexpr NSUInteger identifier_limit = 256;
+constexpr NSUInteger path_limit = 4096;
+
+// The one list of MCP tools, in advertised order. tools/list, the tools/call
+// allow-list, argument validation and window dispatch all derive from it.
+inline NSArray<NSString*>* tool_names() {
+    static NSArray* names = @[ @"get_editor_context", @"list_open_documents", @"read_document", @"get_diagnostics",
+        @"get_definition", @"find_references", @"get_document_symbols", @"search_workspace_symbols", @"get_hover",
+        @"navigate_editor", @"propose_document_edits", @"get_edit_proposal_status", @"get_editor_changes" ];
+    return names;
+}
+inline bool is_language_query(NSString* method) {
+    return [@[@"get_definition", @"find_references", @"get_document_symbols", @"search_workspace_symbols", @"get_hover"] containsObject:method];
+}
+inline bool is_position_query(NSString* method) {
+    return [@[@"get_definition", @"find_references", @"get_hover"] containsObject:method];
+}
+inline bool is_mutating_tool(NSString* method) {
+    return [@[@"navigate_editor", @"propose_document_edits"] containsObject:method];
+}
 inline double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 inline bool wait_for(int fd, short events, double deadline) {
     while(now() < deadline) {
         pollfd descriptor = { fd, events, 0 };
-        int status = poll(&descriptor, 1, MAX(1, (int)((deadline-now()) * 1000)));
+        // Capped so an unbounded (infinite) deadline never overflows the int timeout.
+        int status = poll(&descriptor, 1, (int)MIN(MAX(1.0, (deadline-now()) * 1000), 60000.0));
         if(status < 0 && errno == EINTR) continue;
+        if(status < 0) return false;
         if(status > 0 && (descriptor.revents & (events | POLLHUP))) return true;
         if(status > 0) return false;
     }
@@ -53,6 +76,9 @@ inline write_result_t write_json_result(int fd, id object, double deadline = now
     int type;
     socklen_t size = sizeof(type);
     bool socket = getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &size) == 0;
+    // A pipe carries the MCP host's JSON-RPC stream, where a timeout would leave a
+    // torn frame. Only sockets, whose peer may be unresponsive, get a deadline.
+    if(!socket) deadline = std::numeric_limits<double>::infinity();
     while(left && wait_for(fd, POLLOUT, deadline)) {
         size_t count = MIN(left, (size_t)4096);
         ssize_t n = socket ? send(fd, bytes, count, MSG_DONTWAIT) : write(fd, bytes, count);
@@ -93,24 +119,27 @@ inline bool integer(id value, double maximum) {
     return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID() &&
         [value doubleValue] >= 0 && [value doubleValue] <= maximum && floor([value doubleValue]) == [value doubleValue];
 }
+inline bool identifier(id value, NSUInteger limit = identifier_limit) {
+    return [value isKindOfClass:NSString.class] && [value length] && [value length] <= limit;
+}
 inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
     if(![arguments isKindOfClass:NSDictionary.class]) return @"Expected object arguments";
     if([method isEqual:@"get_editor_context"] || [method isEqual:@"list_open_documents"] || [method isEqual:@"get_connection_status"] || [method isEqual:@"get_editor_change_token"])
         return arguments.count ? @"This tool takes no arguments" : nil;
     if([method isEqual:@"get_editor_changes"]) {
         for(NSString* key in arguments) if(![key isEqual:@"cursor"]) return @"Unknown argument";
-        if(arguments[@"cursor"] && (![arguments[@"cursor"] isKindOfClass:NSString.class] || ![arguments[@"cursor"] length] || [arguments[@"cursor"] length] > 256)) return @"cursor must be a nonempty string of at most 256 characters";
+        if(arguments[@"cursor"] && !identifier(arguments[@"cursor"])) return @"cursor must be a nonempty string of at most 256 characters";
         return nil;
     }
-    if([@[@"get_definition", @"find_references", @"get_document_symbols", @"search_workspace_symbols", @"get_hover"] containsObject:method]) {
-        BOOL position = [@[@"get_definition", @"find_references", @"get_hover"] containsObject:method];
+    if(is_language_query(method)) {
+        BOOL position = is_position_query(method);
         NSMutableArray* keys = [@[@"documentId", @"revision", @"limit", @"offset", @"resultId"] mutableCopy];
         if(position) [keys addObjectsFromArray:@[@"line", @"column"]];
         if([method isEqual:@"find_references"]) [keys addObject:@"includeDeclaration"];
         if([method isEqual:@"search_workspace_symbols"]) [keys addObject:@"query"];
         for(NSString* key in arguments) if(![keys containsObject:key]) return @"Unknown argument";
         for(NSString* key in @[@"documentId", @"revision", @"resultId"])
-            if(arguments[key] && (![arguments[key] isKindOfClass:NSString.class] || ![arguments[key] length] || [arguments[key] length] > 256)) return @"documentId, revision, and resultId must be nonempty strings of at most 256 characters";
+            if(arguments[key] && !identifier(arguments[key])) return @"documentId, revision, and resultId must be nonempty strings of at most 256 characters";
         for(NSString* key in @[@"line", @"column"])
             if(arguments[key] && (!integer(arguments[key], 2147483647) || [arguments[key] integerValue] < 1)) return @"Lines and columns must be positive integers";
         if(arguments[@"column"] && !arguments[@"line"]) return @"line is required with column";
@@ -119,7 +148,7 @@ inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
         if(arguments[@"limit"] && (!integer(arguments[@"limit"], 100) || [arguments[@"limit"] integerValue] < 1)) return @"limit must be an integer between 1 and 100";
         if(arguments[@"includeDeclaration"] && (![arguments[@"includeDeclaration"] isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)arguments[@"includeDeclaration"]) != CFBooleanGetTypeID())) return @"includeDeclaration must be a boolean";
         if([method isEqual:@"search_workspace_symbols"] && (!arguments[@"resultId"] || arguments[@"query"]))
-            if(![arguments[@"query"] isKindOfClass:NSString.class] || ![arguments[@"query"] length] || [arguments[@"query"] length] > 256) return @"query must contain between 1 and 256 characters";
+            if(!identifier(arguments[@"query"])) return @"query must contain between 1 and 256 characters";
         return nil;
     }
     if([method isEqual:@"propose_document_edits"] || [method isEqual:@"get_edit_proposal_status"]) {
@@ -127,7 +156,7 @@ inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
         NSArray* keys = proposal ? @[@"documentId", @"revision", @"summary", @"edits"] : @[@"proposalId"];
         for(NSString* key in arguments) if(![keys containsObject:key]) return @"Unknown argument";
         for(NSString* key in proposal ? @[@"documentId", @"revision"] : @[@"proposalId"])
-            if(![arguments[key] isKindOfClass:NSString.class] || ![arguments[key] length] || [arguments[key] length] > 256) return @"Document, revision, and proposal identifiers must be nonempty strings of at most 256 characters";
+            if(!identifier(arguments[key])) return @"Document, revision, and proposal identifiers must be nonempty strings of at most 256 characters";
         if(!proposal) return nil;
         if(![arguments[@"summary"] isKindOfClass:NSString.class] || ![arguments[@"summary"] length] || [arguments[@"summary"] length] > 2048) return @"summary must contain between 1 and 2,048 characters";
         NSArray* edits = arguments[@"edits"];
@@ -147,7 +176,7 @@ inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
             if(![@[@"documentId", @"path", @"line", @"column", @"endLine", @"endColumn", @"revision", @"focus"] containsObject:key]) return @"Unknown argument";
         if(!!arguments[@"documentId"] == !!arguments[@"path"]) return @"Provide exactly one of documentId or path";
         for(NSString* key in @[@"documentId", @"path", @"revision"])
-            if(arguments[key] && (![arguments[key] isKindOfClass:NSString.class] || ![arguments[key] length] || [arguments[key] rangeOfString:[NSString stringWithFormat:@"%C", (unichar)0]].location != NSNotFound)) return @"documentId, path, and revision must be nonempty strings without NUL characters";
+            if(arguments[key] && (!identifier(arguments[key], [key isEqual:@"path"] ? path_limit : identifier_limit) || [arguments[key] rangeOfString:[NSString stringWithFormat:@"%C", (unichar)0]].location != NSNotFound)) return @"documentId, path, and revision must be nonempty strings without NUL characters, within their length limits";
         if(arguments[@"path"] && ![arguments[@"path"] hasPrefix:@"/"]) return @"path must be an absolute local file path";
         for(NSString* key in @[@"line", @"column", @"endLine", @"endColumn"])
             if(arguments[key] && (!integer(arguments[key], 9007199254740991.0) || [arguments[key] doubleValue] < 1)) return @"Lines and columns must be positive integers";
@@ -162,7 +191,7 @@ inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
         for(NSString* key in arguments)
             if(![@[@"documentId", @"offset", @"limit", @"reportId"] containsObject:key]) return @"Unknown argument";
         for(NSString* key in @[@"documentId", @"reportId"])
-            if(arguments[key] && (![arguments[key] isKindOfClass:NSString.class] || ![arguments[key] length])) return @"documentId and reportId must be nonempty strings when provided";
+            if(arguments[key] && !identifier(arguments[key])) return @"documentId and reportId must be nonempty strings of at most 256 characters when provided";
         if(arguments[@"offset"] && !integer(arguments[@"offset"], 9007199254740991.0)) return @"offset must be a nonnegative integer";
         if(arguments[@"limit"] && (!integer(arguments[@"limit"], 100) || [arguments[@"limit"] integerValue] == 0)) return @"limit must be an integer between 1 and 100";
         return nil;
@@ -170,7 +199,7 @@ inline NSString* validate_arguments(NSString* method, NSDictionary* arguments) {
     if(![method isEqual:@"read_document"]) return @"Unknown tool";
     for(NSString* key in arguments)
         if(![@[@"documentId", @"offset", @"length"] containsObject:key]) return @"Unknown argument";
-    if(![arguments[@"documentId"] isKindOfClass:NSString.class] || ![arguments[@"documentId"] length]) return @"documentId is required";
+    if(!identifier(arguments[@"documentId"])) return @"documentId is required and must be at most 256 characters";
     if(arguments[@"offset"] && !integer(arguments[@"offset"], 9007199254740991.0)) return @"offset must be a nonnegative integer";
     if(arguments[@"length"] && !integer(arguments[@"length"], 32768)) return @"length must be an integer between 0 and 32768";
     return nil;

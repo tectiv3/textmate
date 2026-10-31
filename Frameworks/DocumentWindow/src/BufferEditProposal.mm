@@ -5,11 +5,6 @@
 #include <xdiff.h>
 #import <ns/ns.h>
 
-static NSString* BufferEditRevision(OakDocument* document)
-{
-	return [NSString stringWithFormat:@"%zu:%lu", [document buffer].revision(), (unsigned long)[EditorContextService.sharedService contentGenerationForDocument:document]];
-}
-
 @implementation BufferEditProposal
 {
 	NSDictionary* _context;
@@ -41,7 +36,7 @@ static NSString* BufferEditRevision(OakDocument* document)
 - (BOOL)matchesDocument:(OakDocument*)document
 {
 	return document.isLoaded && [document.identifier.UUIDString isEqual:self.documentId] &&
-		[BufferEditRevision(document) isEqual:_context[@"document"][@"revision"]] &&
+		[[EditorContextService.sharedService revisionForDocument:document] isEqual:_context[@"document"][@"revision"]] &&
 		[_context[@"document"][@"path"] isEqual:document.path ?: (id)NSNull.null];
 }
 

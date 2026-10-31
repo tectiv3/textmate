@@ -152,10 +152,9 @@ static NSDictionary* position_json(position_t const& point) {
 }
 @property NSString* revision;
 @end
-// A snapshot may only carry the revision it actually observed. Kept in step with
-// ContextDocument() in DocumentWindowController.mm.
+// A snapshot may only carry the revision it actually observed.
 static NSString* context_buffer_revision(OakDocument* document) {
-    return [NSString stringWithFormat:@"%zu:%lu", [document buffer].revision(), (unsigned long)[EditorContextService.sharedService contentGenerationForDocument:document]];
+    return [EditorContextService.sharedService revisionForDocument:document];
 }
 static char contextBufferCacheKey;
 @implementation EditorContextBuffer

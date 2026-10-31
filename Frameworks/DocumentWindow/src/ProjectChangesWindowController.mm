@@ -1,7 +1,6 @@
 #import "ProjectChangesWindowController.h"
 
 @interface ProjectChangesWindowController () <NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate>
-@property NSString* directory;
 @property (copy) NSDictionary* (^bufferProvider)(void);
 @property (copy) void (^openFileHandler)(NSString*, NSUInteger);
 @property NSDictionary* snapshot;

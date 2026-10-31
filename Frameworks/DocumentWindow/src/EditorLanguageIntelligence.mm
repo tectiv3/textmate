@@ -7,7 +7,7 @@
 namespace {
 static NSString* Revision(OakDocument* document)
 {
-	return [NSString stringWithFormat:@"%zu:%lu", [document buffer].revision(), (unsigned long)[EditorContextService.sharedService contentGenerationForDocument:document]];
+	return [EditorContextService.sharedService revisionForDocument:document];
 }
 static NSString* Bounded(id value, NSUInteger limit)
 {
@@ -162,7 +162,7 @@ NSDictionary* EditorLanguageNormalize(NSString* method, id raw, NSDictionary* do
 			if(arguments[key] && ![arguments[key] isEqual:previous[@"arguments"][key]]) return [EditorContextSnapshot response:editor_context::failure(@"Use the original query arguments, or just resultId, offset, and limit.", @"invalid_arguments")];
 		return [EditorContextSnapshot response:Page(previous, arguments)];
 	}
-	BOOL position = [@[@"get_definition", @"find_references", @"get_hover"] containsObject:method];
+	BOOL position = editor_context::is_position_query(method);
 	if(position && !arguments[@"line"] && current != document) return [EditorContextSnapshot response:editor_context::failure(@"Specify line and column for an inactive document.", @"invalid_arguments")];
 	EditorContextBuffer* buffer = [EditorContextBuffer bufferForDocument:document revision:metadata[@"revision"]];
 	__weak EditorLanguageIntelligence* weakSelf = self;

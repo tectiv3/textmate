@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 
+@class OakDocument;
+
 typedef void (^EditorContextAction)(double deadline, BOOL (^canCommit)(void), void (^completion)(NSDictionary*));
 
 // Capture on the main thread; await on a worker thread. Query snapshots render
@@ -16,5 +18,7 @@ typedef EditorContextSnapshot* (^EditorContextProvider)(NSString* method, NSDict
 + (instancetype)sharedService;
 - (NSDictionary<NSString*, NSString*>*)environmentForSession:(NSUUID*)session provider:(EditorContextProvider)provider;
 - (void)revokeSession:(NSUUID*)session;
-- (NSUInteger)contentGenerationForDocument:(id)document;
+// The single definition of a document revision: buffer revision plus a content
+// generation, because undo can rewind the buffer revision to an earlier value.
+- (NSString*)revisionForDocument:(OakDocument*)document;
 @end

@@ -55,7 +55,6 @@ private final class TerminalContainer: NSView {
         let terminal: LocalProcessTerminalView
         var title: String
         var attention = TerminalAttention()
-        var customTitle: String? = nil
         var agentStatus = TerminalAgentStatus()
     }
     private var sessions: [Session] = []
@@ -71,19 +70,12 @@ private final class TerminalContainer: NSView {
     @objc public var sessionToolTips: [String] { sessions.map(\.attention.toolTip) }
     /// Worst unseen state across this panel's sessions, as window subtitle text; nil when nothing needs the user.
     @objc public var attentionSubtitle: String? { TerminalAttention.subtitle(for: sessions.map(\.attention)) }
-    @objc public var sessionTitles: [String] { sessions.map { $0.customTitle ?? $0.title } }
+    @objc public var sessionTitles: [String] { sessions.map(\.title) }
     @objc public var sessionStatusValues: [NSNumber] { sessions.map { NSNumber(value: $0.agentStatus.value) } }
     @objc public var sessionStatusDescriptions: [String] { sessions.map { $0.agentStatus.description } }
     @objc public var selectedSessionIndex: Int { sessions.firstIndex { $0.id == selectedID } ?? NSNotFound }
     @objc public var tabsDidChange: (() -> Void)?
     @objc public weak var delegate: OakTerminalPanelControllerDelegate?
-
-    @objc public func renameSession(at index: Int, title: String) {
-        guard sessions.indices.contains(index) else { return }
-        let title = title.components(separatedBy: .controlCharacters).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        sessions[index].customTitle = title.isEmpty ? nil : String(title.prefix(120))
-        rebuildTabs()
-    }
 
     @objc public func installTabBar(_ tabBar: NSView) {
         guard let container = view as? TerminalContainer else { return }
@@ -122,7 +114,7 @@ private final class TerminalContainer: NSView {
         destination.started = true
         session.terminal.processDelegate = destination
         (session.terminal as? FileLinkTerminalView)?.owner = destination
-        destination.sessions.insert(Session(id: newID, uuid: session.uuid, terminal: session.terminal, title: session.title, attention: session.attention, customTitle: session.customTitle, agentStatus: session.agentStatus), at: min(max(0, insertionIndex), destination.sessions.count))
+        destination.sessions.insert(Session(id: newID, uuid: session.uuid, terminal: session.terminal, title: session.title, attention: session.attention, agentStatus: session.agentStatus), at: min(max(0, insertionIndex), destination.sessions.count))
         _ = destination.contextEnvironmentProvider?(session.uuid)
         destination.applyFont(destination.terminalFont)
         destination.updateTerminalColors()
@@ -259,7 +251,8 @@ private final class TerminalContainer: NSView {
            FileManager.default.isExecutableFile(atPath: executable) {
             environment["TM_MCP_SERVER"] = executable
             let directory = URL(fileURLWithPath: executable).deletingLastPathComponent().path
-            environment["PATH"] = directory + ":" + (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
+            // Appended: the directory also holds mate and tm_query, which must not shadow tools the user installed.
+            environment["PATH"] = (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin") + ":" + directory
         }
         // Do not propagate the debug app's injected runtime into shell commands.
         for key in Array(environment.keys) where key.hasPrefix("DYLD_") || key == "ASAN_OPTIONS" {

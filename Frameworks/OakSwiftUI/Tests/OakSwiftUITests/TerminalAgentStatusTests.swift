@@ -56,7 +56,7 @@ private func reportedStatus(_ reports: String) -> [TerminalProgramStatus] {
     defer { source.stopSession(); destination.stopSession() }
     let terminal = try #require(source.terminal)
     let id = try #require(source.sessionIdentifiers.first)
-    source.renameSession(at: 0, title: "My agent")
+    let title = source.sessionTitles
     terminal.feed(text: "\u{1b}]7501;state=blocked:kind=permission:app=codex\u{7}")
     for _ in 0..<100 {
         if source.sessionStatusValues == [2] { break }
@@ -68,7 +68,7 @@ private func reportedStatus(_ reports: String) -> [TerminalProgramStatus] {
     source.transferSession(identifier: id, to: destination, at: 0)
     #expect(source.sessionStatusValues.isEmpty)
     #expect(destination.sessionStatusValues == [2])
-    #expect(destination.sessionTitles == ["My agent"])
+    #expect(destination.sessionTitles == title)
     terminal.feed(text: "\u{1b}]7501;state=done:app=codex\u{7}")
     for _ in 0..<100 {
         if destination.sessionStatusValues == [3] { break }

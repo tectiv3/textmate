@@ -3,6 +3,7 @@
 #import <EditorContextProtocol.h>
 #import <Cocoa/Cocoa.h>
 #import <document/OakDocument.h>
+#import <document/OakDocument Private.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -89,9 +90,18 @@
         _listener = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, fd, 0, queue);
         __weak EditorContextService* weakSelf = self;
         dispatch_semaphore_t slots = dispatch_semaphore_create(8);
+        __weak dispatch_source_t weakListener = _listener;
         dispatch_source_set_event_handler(_listener, ^{
             int client = accept(fd, nullptr, nullptr);
-            if(client < 0) return;
+            if(client < 0) {
+                // The pending connection stays readable while descriptors are exhausted, so
+                // the source would otherwise fire again at once and spin this queue.
+                if(dispatch_source_t source = weakListener; source && (errno == EMFILE || errno == ENFILE)) {
+                    dispatch_suspend(source);
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), queue, ^{ dispatch_resume(source); });
+                }
+                return;
+            }
             if(dispatch_semaphore_wait(slots, DISPATCH_TIME_NOW)) { close(client); return; }
             double deadline = editor_context::now() + editor_context::request_timeout;
             editor_context::configure_socket(client);
@@ -134,8 +144,9 @@
     [EditorContextBuffer invalidateDocument:document];
     [_contentGenerations setObject:@([[_contentGenerations objectForKey:document] unsignedIntegerValue] + 1) forKey:document];
 }
-- (NSUInteger)contentGenerationForDocument:(id)document {
-    return [[_contentGenerations objectForKey:document] unsignedIntegerValue];
+- (NSString*)revisionForDocument:(OakDocument*)document {
+    NSUInteger generation = [[_contentGenerations objectForKey:document] unsignedIntegerValue];
+    return [NSString stringWithFormat:@"%zu:%lu", [document buffer].revision(), (unsigned long)generation];
 }
 - (void)shutdown {
     [_registrations removeAllObjects];

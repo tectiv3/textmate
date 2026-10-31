@@ -265,11 +265,6 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 		_leftBorderView = [[OakBox alloc] initWithFrame:NSZeroRect];
 
 		_textField = OakCreateLabel();
-		_textField.alignment = NSTextAlignmentCenter;
-		_textField.bordered = NO;
-		_textField.bezeled = NO;
-		_textField.drawsBackground = NO;
-		_textField.focusRingType = NSFocusRingTypeNone;
         _statusView = [[NSView alloc] initWithFrame:NSZeroRect];
         _statusImage = [[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 14, 14)];
         _statusSpinner = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(0, 0, 14, 14)];

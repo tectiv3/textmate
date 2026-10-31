@@ -50,11 +50,15 @@
 	NSArray<NSString*>* toolTips = self.controller.sessionToolTips;
 	return index < toolTips.count ? toolTips[index] : @"";
 }
-- (OakTabStatus)tabBarView:(OakTabBarView*)bar statusForIndex:(NSUInteger)index { return (OakTabStatus)self.controller.sessionStatusValues[index].integerValue; }
-- (NSString*)tabBarView:(OakTabBarView*)bar statusDescriptionForIndex:(NSUInteger)index { return self.controller.sessionStatusDescriptions[index]; }
-- (void)tabBarView:(OakTabBarView*)bar setTitle:(NSString*)title forIndex:(NSUInteger)index
+- (OakTabStatus)tabBarView:(OakTabBarView*)bar statusForIndex:(NSUInteger)index
 {
-	[self.controller renameSessionAt:index title:title];
+	NSArray<NSNumber*>* values = self.controller.sessionStatusValues;
+	return index < values.count ? (OakTabStatus)values[index].integerValue : OakTabStatusNone;
+}
+- (NSString*)tabBarView:(OakTabBarView*)bar statusDescriptionForIndex:(NSUInteger)index
+{
+	NSArray<NSString*>* descriptions = self.controller.sessionStatusDescriptions;
+	return index < descriptions.count ? descriptions[index] : @"";
 }
 - (BOOL)tabBarView:(OakTabBarView*)bar shouldSelectIndex:(NSUInteger)index
 {

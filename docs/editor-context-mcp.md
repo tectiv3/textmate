@@ -16,7 +16,7 @@ The launcher checks the editor connection, finds Codex CLI, and starts it with t
 tm-codex "Tell me which file is open and explain my selection"
 ```
 
-The bundled command directory is added to new terminals' PATH. If a shell startup file replaces PATH entirely, run the launcher by its full path:
+The bundled command directory is appended to new terminals' PATH, so it never shadows a command you installed. If a shell startup file replaces PATH entirely, run the launcher by its full path:
 
 ```sh
 "${TM_MCP_SERVER%/*}/tm-codex"

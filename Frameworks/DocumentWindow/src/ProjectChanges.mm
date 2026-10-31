@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <chrono>
+#include <scm/drivers/api.h>
 
 namespace {
 constexpr NSUInteger fileLimit = 4 * 1024 * 1024;
@@ -13,10 +14,26 @@ static double Now() { return std::chrono::duration<double>(std::chrono::steady_c
 static dispatch_time_t At(double when) { return dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MAX(0, when-Now()) * NSEC_PER_SEC)); }
 static NSDictionary* Error(NSString* message) { return @{ @"error": message }; }
 
+// The lookup the gutter and SCM drivers use: TM_GIT, then PATH, skipping the /usr/bin/git
+// shim when developer tools are missing so it cannot raise an install dialog.
+static NSString* GitExecutable()
+{
+	static NSString* resolved;
+	@synchronized(NSProcessInfo.processInfo) {
+		if(!resolved) {
+			std::string path = scm::find_executable("git", "TM_GIT");
+			if(path != NULL_STR) resolved = @(path.c_str());
+		}
+		return resolved;
+	}
+}
+
 static NSDictionary* Git(NSString* directory, NSArray<NSString*>* arguments)
 {
+	NSString* executable = GitExecutable();
+	if(!executable) return Error(@"Git was not found. Install the macOS command line tools, or set TM_GIT in ~/.tm_properties.");
 	NSTask* task = [[NSTask alloc] init];
-	task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/git"];
+	task.executableURL = [NSURL fileURLWithPath:executable];
 	task.arguments = [@[@"--no-optional-locks", @"-c", @"core.fsmonitor=false", @"-C", directory] arrayByAddingObjectsFromArray:arguments];
 	NSMutableDictionary* environment = [NSProcessInfo.processInfo.environment mutableCopy];
 	// This view always reviews the requested directory, independently of any
@@ -65,6 +82,8 @@ static NSDictionary* Git(NSString* directory, NSArray<NSString*>* arguments)
 	// Cancelling and waiting keeps the descriptor open until no handler can read it.
 	dispatch_source_cancel(source);
 	dispatch_semaphore_wait(stopped, DISPATCH_TIME_FOREVER);
+	// Past the size cap Git would block on the full pipe until the deadline, so stop it now.
+	if(problem && task.running) kill(task.processIdentifier, SIGKILL);
 	if(dispatch_semaphore_wait(exited, At(deadline))) {
 		if(!problem) problem = @"Git took too long to respond. Try refreshing the view.";
 		if(task.running) kill(task.processIdentifier, SIGKILL);

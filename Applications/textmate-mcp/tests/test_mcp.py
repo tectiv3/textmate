@@ -11,7 +11,6 @@ import unittest
 import contextlib
 import time
 import shutil
-import re
 try:
     import tomllib            # Python 3.11+; Xcode's python3 is 3.9
 except ModuleNotFoundError:
@@ -21,30 +20,10 @@ import queue
 EXECUTABLE = str(Path(sys.argv.pop(1)).resolve())
 VALIDATOR = str(Path(sys.argv.pop(1)).resolve()) if len(sys.argv) > 1 else None
 
-ROOT = Path(__file__).resolve().parents[3]
-MCP_SOURCE = ROOT / "Applications/textmate-mcp/src/main.mm"
-PROTOCOL_SOURCE = ROOT / "Shared/include/EditorContextProtocol.h"
 
 # Methods the helper uses for its own transport (--check and change-token
 # polling). validate_arguments accepts them; they are not MCP tools.
 INTERNAL_METHODS = {"get_connection_status", "get_editor_change_token"}
-
-
-def compared_names(source, parameter):
-    """Names in ``@[@"a", @"b"] containsObject:parameter`` literals."""
-    pattern = re.compile(r'@\[((?:@"[a-z_]+",?\s*)+)\] containsObject:' + parameter + r'\]')
-    return {name for body in pattern.findall(source) for name in re.findall(r'@"([a-z_]+)"', body)}
-
-
-def described_names(source):
-    """Names from the entries of the description/schema table."""
-    table = re.search(r'NSArray\* descriptions = @\[(.*?)\];', source, re.S)
-    return set(re.findall(r'@\[@"([a-z_]+)", @"', table.group(1))) if table else set()
-
-
-def validate_arguments_names(source):
-    """Names compared against the method parameter inside validate_arguments."""
-    return set(re.findall(r'\[method isEqual:@"([a-z_]+)"\]', source)) | compared_names(source, "method")
 
 
 def request(identifier, method, **params):
@@ -171,30 +150,54 @@ class MCPTests(unittest.TestCase):
             self.assertNotEqual(by_id[2 + index].get("error", {}).get("message"), "Unknown tool", name)
 
     @unittest.skipUnless(VALIDATOR, "the textmate-mcp-tool-surface helper was not supplied")
-    def test_tool_surface_copies_stay_in_sync(self):
-        main_source = MCP_SOURCE.read_text(encoding="utf-8")
-        protocol_source = PROTOCOL_SOURCE.read_text(encoding="utf-8")
-        advertised = {tool["name"] for tool in self.advertised_tools()}
-        self.assertTrue(advertised, "the helper advertised no tools")
-        described = described_names(main_source)
-        allow_list = compared_names(main_source, "name")
-        validated = validate_arguments_names(protocol_source)
-        self.assertEqual(described, advertised,
-                         "the description/schema table in main.mm disagrees with tools/list")
-        self.assertEqual(allow_list, advertised,
-                         "the tools/call allow-list in main.mm disagrees with the advertised tools")
-        self.assertLessEqual(INTERNAL_METHODS, validated,
-                             "validate_arguments no longer accepts the helper's internal methods")
-        self.assertEqual(validated - INTERNAL_METHODS, advertised,
-                         "the validate_arguments branches disagree with the advertised tools")
+    def test_tool_surface_matches_registry(self):
+        advertised = [tool["name"] for tool in self.advertised_tools()]
+        registry = subprocess.run([VALIDATOR, "--list"], text=True, capture_output=True, timeout=10, check=True).stdout.split()
+        self.assertTrue(registry, "the helper reported an empty tool registry")
+        self.assertEqual(advertised, registry,
+                         "tools/list disagrees with the compiled tool registry in EditorContextProtocol.h")
 
-        candidates = sorted(advertised | allow_list | validated)
+        candidates = sorted(set(registry) | INTERNAL_METHODS | {"not_a_tool"})
         process = subprocess.run([VALIDATOR, *candidates], text=True, capture_output=True, timeout=10, check=True)
         verdicts = dict(line.split("\t") for line in process.stdout.splitlines())
         self.assertEqual(set(verdicts), set(candidates), "the helper did not report on every candidate")
         accepted = {name for name, verdict in verdicts.items() if verdict == "accepted"}
-        self.assertEqual(accepted, advertised | INTERNAL_METHODS,
-                         "validate_arguments' compiled branches disagree with the extracted names")
+        self.assertEqual(accepted, set(registry) | INTERNAL_METHODS,
+                         "validate_arguments' compiled branches disagree with the tool registry")
+
+    def test_identifier_limits_match_the_advertised_schemas(self):
+        tools = {tool["name"]: tool["inputSchema"]["properties"] for tool in self.advertised_tools()}
+        long_id, long_path = "x" * 257, "/" + "x" * 4096
+        invalid = [("read_document", {"documentId": long_id}), ("get_diagnostics", {"documentId": long_id}),
+                   ("get_diagnostics", {"reportId": long_id}), ("navigate_editor", {"documentId": long_id}),
+                   ("navigate_editor", {"documentId": "d", "revision": long_id}), ("navigate_editor", {"path": long_path}),
+                   ("get_editor_changes", {"cursor": long_id})]
+        replies = self.run_server([INITIALIZE, READY] + [request(i+2, "tools/call", name=name, arguments=args)
+            for i, (name, args) in enumerate(invalid)])
+        self.assertTrue(all(reply["error"]["code"] == -32602 for reply in replies[1:]))
+        for name, key, limit in [("read_document", "documentId", 256), ("get_diagnostics", "reportId", 256),
+                                 ("navigate_editor", "path", 4096), ("navigate_editor", "revision", 256)]:
+            self.assertEqual(tools[name][key]["maxLength"], limit, f"{name}.{key}")
+            self.assertEqual(tools[name][key]["minLength"], 1, f"{name}.{key}")
+
+    def test_stalled_host_does_not_tear_a_stdout_frame(self):
+        # The pipe holds far less than the payload, so the write blocks for longer than
+        # the three-second socket timeout; the frame must still arrive whole.
+        with context_server(lambda message, _: {"text": "x" * 500000}) as environment:
+            process = subprocess.Popen([EXECUTABLE], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=environment)
+            try:
+                for message in (INITIALIZE, READY, request(2, "tools/call", name="get_editor_context", arguments={})):
+                    process.stdin.write(json.dumps(message) + "\n")
+                process.stdin.flush()
+                time.sleep(4)
+                self.assertEqual(json.loads(process.stdout.readline())["id"], 1)
+                reply = json.loads(process.stdout.readline())
+                self.assertEqual(reply["id"], 2)
+                self.assertEqual(len(json.loads(reply["result"]["content"][0]["text"])["text"]), 500000)
+            finally:
+                process.stdin.close()
+                process.wait(timeout=10)
+                process.stdout.close()
 
     def test_initialization_tools_notifications_and_pipelining(self):
         replies = self.run_server([

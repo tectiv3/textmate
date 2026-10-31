@@ -13,7 +13,7 @@ if(BUILD_TESTING)
   if(Python3_Interpreter_FOUND)
     add_executable(textmate-mcp-tool-surface tests/tool_surface_check.mm)
     target_link_libraries(textmate-mcp-tool-surface PRIVATE "-framework Foundation")
-    # The drift test compares the three hand-maintained tool lists and asks this
+    # The drift test compares tools/list with the compiled tool registry and asks this
     # helper which names validate_arguments actually accepts.
     add_test(NAME textmate-mcp
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_mcp.py
