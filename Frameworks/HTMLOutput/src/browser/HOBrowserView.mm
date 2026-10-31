@@ -72,6 +72,31 @@ static NSString* EscapeHTML (NSString* str)
 		[config.userContentController addUserScript:script];
 	}
 
+	// Apply shared typography to streamed bundle results, not ordinary web navigation.
+	NSURL* cssURL = [[NSBundle bundleForClass:[self class]] URLForResource:@"HTMLOutputAppearance" withExtension:@"css"];
+	if(NSString* css = [NSString stringWithContentsOfURL:cssURL encoding:NSUTF8StringEncoding error:nil])
+	{
+		NSData* json = [NSJSONSerialization dataWithJSONObject:@[ css ] options:0 error:nil];
+		NSString* source = [NSString stringWithFormat:
+			@"(() => {"
+			 "if (location.protocol !== 'x-txmt-filehandle:') return;"
+			 "const style = document.createElement('style');"
+			 "style.id = 'textmate-output-appearance';"
+			 "style.textContent = %@[0];"
+			 "const install = () => {"
+			 "  const parent = document.head || document.documentElement;"
+			 "  if (!parent) return false;"
+			 "  parent.appendChild(style); return true;"
+			 "};"
+			 "if (!install()) {"
+			 "  const observer = new MutationObserver(() => { if (install()) observer.disconnect(); });"
+			 "  observer.observe(document, { childList: true, subtree: true });"
+			 "}"
+			 "})();", [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
+		[config.userContentController addUserScript:[[WKUserScript alloc] initWithSource:source
+			injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES]];
+	}
+
 	// Allow file:// access from custom scheme pages
 	[config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
 	[config setValue:@YES forKey:@"allowUniversalAccessFromFileURLs"];

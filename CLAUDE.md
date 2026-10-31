@@ -106,6 +106,26 @@ Use `oak::application_t::support("relative/path")` (from `<OakSystem/application
 - **Test files:** `Frameworks/<name>/tests/t_*.cc` or `t_*.mm`
 - **Run tests:** `cd build-debug && ctest --output-on-failure`
 
+### Reading results — `ctest` is the only oracle
+
+The test binaries are not an oracle. Follow this and nothing else.
+
+- **Build first.** `ctest` does not rebuild; a stale binary makes every result meaningless.
+  `ninja <target> && ctest -R '^<Suite>$' --output-on-failure 2>&1 | tail -20`
+- **Green** is the line `100% tests passed, 0 tests failed out of N`. **Red** is one or more
+  `path:line: Assertion failed:` lines plus a `FAILED:` list. Nothing else is a verdict.
+- **Never invoke the test binaries directly.** The `bin/gen_test` runners print
+  `N of M tests failed` and still exit 0 (`bin/gen_test:143`), so exit codes are not a signal.
+  Do not grep `gen_test` or reverse-engineer the harness to interpret a run.
+- **Suite names are not framework names.** `EditorContext` is registered from
+  `Frameworks/DocumentWindow/context-tests/`; `textmate-mcp` is a Python suite. `-R '^Name$'`
+  needs the registered name — list them with `ctest -N` instead of guessing.
+- **Run a check once.** A second run only distinguishes flakiness. If two identical runs
+  disagree, report it as flaky and stop; a third run is not information.
+- **State the expected result** (suite, count, outcome) when asking for verification. When
+  actual differs from expected, report the assertion sites and stop — do not iterate until green.
+
+
 ## Upstream Status
 
 This fork (`tectiv3/textmate`) is based on `textmate/textmate` at the latest upstream commit. Upstream is unmaintained. Active community fork: `tagliala/textmate`.

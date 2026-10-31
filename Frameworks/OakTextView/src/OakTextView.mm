@@ -1397,6 +1397,21 @@ doScroll:
 	return [self nsRangeForRange:documentView->ranges().last()];
 }
 
+- (NSUInteger)editorContextCaretByteOffset
+{
+    return documentView ? documentView->ranges().last().last.index : 0;
+}
+
+- (ng::ranges_t)editorContextByteRanges
+{
+    ng::ranges_t result;
+    if(documentView) for(auto const& range : documentView->ranges()) {
+        if(result.size() == 129) break;
+        result.push_back(range);
+    }
+    return result;
+}
+
 - (NSArray*)accessibilitySelectedTextRanges
 {
 	if(!documentView)

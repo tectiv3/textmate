@@ -434,11 +434,12 @@ namespace ng
 		return isMultiline;
 	}
 
-	ranges_t dissect_columnar (buffer_api_t const& buffer, ranges_t const& selection)
+	ranges_t dissect_columnar (buffer_api_t const& buffer, ranges_t const& selection, size_t limit)
 	{
 		ranges_t res;
 		for(auto const& range : selection)
 		{
+            if(res.size() >= limit) return res;
 			if(range.columnar && !range.empty())
 			{
 				size_t colA = count_columns(buffer, range.first);
@@ -452,6 +453,7 @@ namespace ng
 
 				for(size_t n = fromLine; n <= toLine; ++n)
 				{
+                    if(res.size() >= limit) return res;
 					index_t from = at_column(buffer, n, fromCol), to = at_column(buffer, n, toCol);
 					res.push_back(range_t(from, to, false, from.carry || to.carry, range.unanchored, range.color));
 				}

@@ -733,6 +733,16 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 
 - (void)loadModalForWindow:(NSWindow*)aWindow completionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block
 {
+	[self loadForWindow:aWindow interactive:YES completionHandler:block];
+}
+
+- (void)loadWithoutUIWithCompletionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block
+{
+	[self loadForWindow:nil interactive:NO completionHandler:block];
+}
+
+- (void)loadForWindow:(NSWindow*)aWindow interactive:(BOOL)interactive completionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block
+{
 	block = block ?: ^(OakDocumentIOResult, NSString*, oak::uuid_t const&){ };
 
 	[self open];
@@ -752,10 +762,16 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 
 	struct callback_t : file::open_callback_t
 	{
-		callback_t (OakDocument* self, NSWindow* window, void(^block)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID)) : _self(self), _window(window), _block(block) { }
+		callback_t (OakDocument* self, NSWindow* window, BOOL interactive, void(^block)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID)) : _self(self), _window(window), _interactive(interactive), _block(block) { }
+
+		void obtain_authorization (std::string const& path, osx::authorization_t auth, file::open_context_ptr context)
+		{
+			if(_interactive) file::open_callback_t::obtain_authorization(path, auth, context);
+		}
 
 		void select_charset (std::string const& path, io::bytes_ptr content, file::open_context_ptr context)
 		{
+			if(!_interactive) return; // Context teardown reports failure through show_error.
 			[_window.attachedSheet orderOut:_self];
 
 			EncodingWindowController* controller = [[EncodingWindowController alloc] initWithData:[NSData dataWithBytesNoCopy:content->begin() length:content->size() freeWhenDone:NO]];
@@ -807,6 +823,7 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	private:
 		OakDocument* _self;
 		NSWindow* _window;
+		BOOL _interactive;
 		void(^_block)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID);
 	};
 
@@ -821,7 +838,7 @@ static void* kDocumentEditedObserverContext = &kDocumentEditedObserverContext;
 	}
 
 	self.loadCompletionHandlers = @[ block ];
-	auto cb = std::make_shared<callback_t>(self, aWindow, ^(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID){
+	auto cb = std::make_shared<callback_t>(self, aWindow, interactive, ^(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID){
 		auto blocks = self.loadCompletionHandlers;
 		self.loadCompletionHandlers = nil;
 		for(void(^f)(OakDocumentIOResult, NSString*, oak::uuid_t const&) in blocks)

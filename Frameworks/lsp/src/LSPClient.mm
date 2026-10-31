@@ -128,6 +128,7 @@ static void extractExtensionsFromGlob (NSString* pattern, NSMutableSet<NSString*
 @interface LSPClient ()
 {
 	NSTask* _task;
+	NSSet<NSString*>* _languageQueries;
 	NSPipe* _stdinPipe;
 	NSPipe* _stdoutPipe;
 	NSPipe* _stderrPipe;
@@ -884,6 +885,15 @@ static void extractExtensionsFromGlob (NSString* pattern, NSMutableSet<NSString*
 			if(msg["result"].contains("capabilities"))
 			{
 				auto const& caps = msg["result"]["capabilities"];
+				NSMutableSet* queries = [NSMutableSet set];
+				NSDictionary<NSString*, NSString*>* providers = @{ @"textDocument/definition": @"definitionProvider", @"textDocument/references": @"referencesProvider",
+					@"textDocument/documentSymbol": @"documentSymbolProvider", @"workspace/symbol": @"workspaceSymbolProvider", @"textDocument/hover": @"hoverProvider" };
+				BOOL utf16 = !caps.contains("positionEncoding") || caps["positionEncoding"] == "utf-16";
+				for(NSString* method in providers) {
+					auto found = caps.find(providers[method].UTF8String);
+					if(utf16 && found != caps.end() && (found->is_object() || (found->is_boolean() && found->get<bool>()))) [queries addObject:method];
+				}
+				_languageQueries = queries;
 				if(caps.contains("diagnosticProvider") && caps["diagnosticProvider"].is_object())
 				{
 					auto const& diagnostic = caps["diagnosticProvider"];
@@ -1176,7 +1186,10 @@ static void extractExtensionsFromGlob (NSString* pattern, NSMutableSet<NSString*
 		{"workspaceFolders", json::array({{{"uri", rootUriStr}, {"name", _workingDirectory.lastPathComponent.UTF8String}}})},
 		{"initializationOptions", _initOptionsJSON.length ? json::parse(_initOptionsJSON.UTF8String, nullptr, false) : json::object()},
 		{"capabilities", {
+			{"general", {{"positionEncodings", {"utf-16"}}}},
 			{"textDocument", {
+				{"documentSymbol", {{"dynamicRegistration", false}, {"hierarchicalDocumentSymbolSupport", true}}},
+				{"references", {{"dynamicRegistration", false}}},
 				{"publishDiagnostics", json::object()},
 				{"diagnostic", {
 					{"dynamicRegistration", false},
@@ -1224,6 +1237,7 @@ static void extractExtensionsFromGlob (NSString* pattern, NSMutableSet<NSString*
 				{"workDoneProgress", true}
 			}},
 			{"workspace", {
+				{"symbol", {{"dynamicRegistration", false}}},
 				{"diagnostics", {{"refreshSupport", true}}},
 				{"didChangeWatchedFiles", {
 					{"dynamicRegistration", true},
@@ -1426,6 +1440,8 @@ static void extractExtensionsFromGlob (NSString* pattern, NSMutableSet<NSString*
 	json response = {{"jsonrpc", "2.0"}, {"id", objCIdToJson(requestId)}, {"result", result}};
 	[self sendMessage:response];
 }
+
+- (BOOL)supportsLanguageQuery:(NSString*)method { return [_languageQueries containsObject:method]; }
 
 - (int)sendCustomRequest:(NSString*)method params:(NSDictionary*)params completion:(void(^)(id))callback
 {

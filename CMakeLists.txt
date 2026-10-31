@@ -170,6 +170,7 @@ add_subdirectory(Frameworks/DocumentWindow)
 add_subdirectory(Frameworks/CommitWindow)
 
 # === Applications ===
+add_subdirectory(Applications/textmate-mcp)
 add_subdirectory(Applications/mate)
 add_subdirectory(Applications/gtm)
 add_subdirectory(Applications/indent)

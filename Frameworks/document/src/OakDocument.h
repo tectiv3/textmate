@@ -64,6 +64,8 @@ typedef NS_ENUM(NSInteger, OakDocumentIOResult) {
 - (NSString*)displayNameWithExtension:(BOOL)flag;
 
 - (void)loadModalForWindow:(NSWindow*)aWindow completionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block;
+// Like loadModalForWindow:, but reports failure instead of requesting encoding or authorization UI.
+- (void)loadWithoutUIWithCompletionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block;
 - (void)saveModalForWindow:(NSWindow*)aWindow completionHandler:(void(^)(OakDocumentIOResult result, NSString* errorMessage, oak::uuid_t const& filterUUID))block;
 
 - (void)open; // This is currently implicit in loadModalForWindow:completionHandler:

@@ -57,6 +57,9 @@ extern NSString* const LSPShowMessageRequestNotification;
 - (void)respondToApplyEdit:(id)requestId applied:(BOOL)applied failureReason:(NSString*)reason;
 - (void)respondToShowMessageRequest:(id)requestId action:(NSDictionary*)action;
 
+// Static capabilities for the read-only language queries exposed to editor clients.
+- (BOOL)supportsLanguageQuery:(NSString*)method;
+
 // Generic JSON-RPC methods for non-standard LSP extensions (e.g., Copilot)
 - (int)sendCustomRequest:(NSString*)method params:(NSDictionary*)params completion:(void(^)(id))callback;
 - (void)sendCustomNotification:(NSString*)method params:(NSDictionary*)params;

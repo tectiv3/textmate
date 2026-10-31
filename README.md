@@ -137,6 +137,10 @@ Press **Cmd+Shift+P** to open the command palette — a unified fuzzy-search int
 
 Results are ranked by fuzzy match score. Frequently used items are boosted over time.
 
+## Project Changes
+
+Choose **View → Show Project Changes** to review changed files across the repository against the last Git commit. The window includes staged, unstaged, new, deleted, and unsaved named files, with colored diffs, previous/next change navigation, and an **Open File** action. It refreshes while open. See [Project Changes](docs/project-changes.md) for details.
+
 ## LSP Support
 
 TextMate has built-in Language Server Protocol support for diagnostics and completions. Configure it per-project in `.tm_properties`:

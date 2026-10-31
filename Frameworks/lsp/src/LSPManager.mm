@@ -103,6 +103,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	NSMutableSet<NSUUID*>*                                   _openDocuments;
 	NSMutableDictionary<NSUUID*, NSTimer*>*                  _changeTimers;
 	NSMutableDictionary<NSString*, NSArray<NSDictionary*>*>* _diagnosticsByURI;
+	NSMutableDictionary<NSString*, NSString*>*               _diagnosticReportIdentifiers;
 	NSMutableSet<NSString*>* _clearCacheRoots;
 }
 @end
@@ -128,6 +129,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 		_openDocuments      = [NSMutableSet new];
 		_changeTimers       = [NSMutableDictionary new];
 		_diagnosticsByURI   = [NSMutableDictionary new];
+		_diagnosticReportIdentifiers = [NSMutableDictionary new];
 		_clearCacheRoots    = [NSMutableSet new];
 
 		[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(applicationWillTerminate:) name:NSApplicationWillTerminateNotification object:nil];
@@ -313,6 +315,7 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	{
 		NSURL* fileURL = [NSURL fileURLWithPath:path];
 		[_diagnosticsByURI removeObjectForKey:fileURL.absoluteString];
+		[_diagnosticReportIdentifiers removeObjectForKey:fileURL.absoluteString];
 	}
 }
 
@@ -377,6 +380,21 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 		if(callback)
 			callback(suggestions);
 	}];
+}
+
+- (dispatch_block_t)requestLanguageQuery:(NSString*)method forDocument:(OakDocument*)document params:(NSDictionary*)params completion:(void(^)(id, NSString*))callback
+{
+	NSAssert(NSThread.isMainThread, @"Language queries run on the main thread");
+	LSPClient* client = _documentClients[document.identifier];
+	if(!client || !client.running || ![_openDocuments containsObject:document.identifier]) { callback(nil, @"server_unavailable"); return nil; }
+	if(!client.initialized) { callback(nil, @"server_starting"); return nil; }
+	if(![client supportsLanguageQuery:method]) { callback(nil, @"unsupported_capability"); return nil; }
+	[self flushPendingChangesForDocument:document];
+	int requestId = [client sendCustomRequest:method params:params completion:^(id result){
+		callback(result, result ? nil : @"language_request_failed");
+	}];
+	__weak LSPClient* originalClient = client;
+	return ^{ [originalClient cancelRequest:requestId]; };
 }
 
 - (void)requestDefinitionForDocument:(OakDocument*)document line:(NSUInteger)line character:(NSUInteger)character completion:(void(^)(NSArray<NSDictionary*>*))callback
@@ -711,6 +729,22 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 	return _diagnosticsByURI[fileURL.absoluteString] ?: @[];
 }
 
+- (NSDictionary*)diagnosticReportForDocument:(OakDocument*)document
+{
+	NSAssert(NSThread.isMainThread, @"Capture diagnostics on the main thread");
+	NSString* uri = document.path ? [NSURL fileURLWithPath:document.path].absoluteString : nil;
+	NSArray* diagnostics = uri ? _diagnosticsByURI[uri] : nil;
+	NSString* serverStatus = uri ? ([self serverStatusForDocument:document] ?: @"unavailable") : @"unavailable";
+	return @{ @"diagnostics": [diagnostics copy] ?: @[],
+	          @"reportId": (uri ? _diagnosticReportIdentifiers[uri] : nil) ?: (id)NSNull.null,
+	          @"status": diagnostics ? @"reported" : ([serverStatus isEqual:@"unavailable"] ? @"unavailable" : @"pending"),
+	          @"serverStatus": serverStatus,
+	          @"pendingChanges": @(_changeTimers[document.identifier] != nil),
+	          // LSP diagnostics do not always carry a document version. The
+	          // current buffer revision must not be presented as their revision.
+	          @"freshness": @"unknown" };
+}
+
 - (NSString*)serverStatusForDocument:(OakDocument*)document
 {
 	LSPClient* client = _documentClients[document.identifier];
@@ -897,7 +931,8 @@ static std::string detectWorkspaceRoot (std::string const& filePath)
 - (void)lspClient:(LSPClient*)client didReceiveDiagnostics:(NSArray<NSDictionary*>*)diagnostics forDocumentURI:(NSString*)uri
 {
 	// Cache full diagnostics for codeAction requests
-	_diagnosticsByURI[uri] = diagnostics;
+	_diagnosticsByURI[uri] = [diagnostics copy];
+	_diagnosticReportIdentifiers[uri] = NSUUID.UUID.UUIDString;
 
 	NSURL* url = [NSURL URLWithString:uri];
 	NSString* filePath = url.path;

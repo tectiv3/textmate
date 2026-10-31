@@ -1,4 +1,5 @@
 #import "GutterView.h"
+#import <selection/types.h>
 #import <OakAppKit/OakView.h>
 #import <theme/theme.h>
 #import <command/parser.h>
@@ -48,6 +49,7 @@ enum OTVFontSmoothing : NSUInteger
 @property (nonatomic, readonly) BOOL                        hasMultiLineSelection;
 @property (nonatomic, readonly) BOOL                        hasSelection;
 @property (nonatomic) NSString*                             selectionString;
+- (void)ensureSelectionIsInVisibleArea:(id)sender;
 @property (nonatomic, readonly) NSString*                   symbol;
 
 @property (nonatomic, getter = isRecordingMacro) BOOL       recordingMacro;
@@ -60,6 +62,10 @@ enum OTVFontSmoothing : NSUInteger
 - (NSPoint)positionForWindowUnderCaret;
 - (scope::context_t)scopeContext;
 - (folding_state_t)foldingStateForLine:(NSUInteger)lineNumber;
+
+// Raw byte coordinates in editor order, capped at 129 (128 plus truncation sentinel).
+- (ng::ranges_t)editorContextByteRanges;
+- (NSUInteger)editorContextCaretByteOffset;
 
 - (void)updateDocumentMetadata;
 

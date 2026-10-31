@@ -214,8 +214,12 @@ final class FileLinkTerminalView: LocalProcessTerminalView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         clearHighlight()
         guard window != nil else { return }
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .flagsChanged, .scrollWheel, .leftMouseDragged]) { [weak self] event in
-            self?.updateHighlight(event)
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .flagsChanged, .scrollWheel, .leftMouseDragged]) { [weak self] event in
+            if event.type == .keyDown {
+                if let self, self.owner?.handleTerminalKeyEvent(event, source: self) == true { return nil }
+            } else {
+                self?.updateHighlight(event)
+            }
             return event
         }
     }

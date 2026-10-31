@@ -186,6 +186,8 @@ typedef NS_ENUM(NSInteger, TerminalDividerDrag) {
 		_terminalController.shellPath = self.terminalShellPath;
 		_terminalController.shellArguments = self.terminalShellArguments;
 		_terminalController.delegate = self;
+		_terminalController.contextEnvironmentProvider = self.contextEnvironmentProvider;
+		_terminalController.contextSessionClosed = self.contextSessionClosed;
 		[_panelView removeFromSuperview];
 		_panelView = _terminalController.view;
 		[self rebuildLayout];
@@ -285,10 +287,10 @@ typedef NS_ENUM(NSInteger, TerminalDividerDrag) {
 	self.panelHeight   = source.panelHeight;
 }
 
-- (void)applyTerminalBackground:(NSColor*)background foreground:(NSColor*)foreground caret:(NSColor*)caret selection:(NSColor*)selection
+- (void)applyTerminalBackground:(NSColor*)background foreground:(NSColor*)foreground caret:(NSColor*)caret selection:(NSColor*)selection syntaxColors:(NSArray<NSColor*>*)syntaxColors
 {
 #if HAVE_OAK_SWIFTUI
-	self.terminalTheme = [[OakTerminalTheme alloc] initWithBackground:background foreground:foreground caret:caret selection:selection];
+	self.terminalTheme = [[OakTerminalTheme alloc] initWithBackground:background foreground:foreground caret:caret selection:selection syntaxColors:syntaxColors];
 	[_terminalController applyTheme:self.terminalTheme];
 #endif
 }

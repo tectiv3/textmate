@@ -573,6 +573,96 @@ private func waitForRecords(_ terminal: LocalProcessTerminalView, _ state: Termi
     return false
 }
 
+@MainActor
+private final class TerminalToggleTarget: NSObject {
+    var panelVisible = true
+    @objc func toggleTerminalPanel(_ sender: Any?) { panelVisible.toggle() }
+}
+
+@MainActor
+@Test func terminalPanelToggleShortcutReachesMenuFromTerminalFocus() throws {
+    _ = NSApplication.shared
+    let controller = makeTerminalController()
+    controller.startSession()
+    defer { controller.stopSession() }
+    let terminal = try #require(controller.terminal)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: .titled, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.contentView = nil }
+    window.makeFirstResponder(terminal)
+
+    let target = TerminalToggleTarget()
+    let menu = NSMenu()
+    let item = menu.addItem(withTitle: "Hide Terminal Panel", action: #selector(TerminalToggleTarget.toggleTerminalPanel(_:)), keyEquivalent: "`")
+    item.keyEquivalentModifierMask = [.control]
+    item.target = target
+    let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "\u{00}", charactersIgnoringModifiers: "`", isARepeat: false, keyCode: 50))
+    #expect(!controller.handleTerminalKeyEvent(event, source: terminal))
+    #expect(!controller.view.performKeyEquivalent(with: event))
+    #expect(menu.performKeyEquivalent(with: event))
+    #expect(!target.panelVisible)
+}
+
+@MainActor
+@Test func terminalControlKeysStayWithFocusedSession() async throws {
+    _ = NSApplication.shared
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let controller = makeTerminalController()
+    let delegate = TerminalTestDelegate()
+    delegate.workingDirectory = folder.path
+    controller.delegate = delegate
+    defer { withExtendedLifetime(delegate) {} }
+    controller.startSession()
+    defer { controller.stopSession() }
+    let terminal = try #require(controller.terminal)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: .titled, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = controller.view
+    defer { window.contentView = nil }
+    let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "\u{0b}", charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40))
+    window.makeFirstResponder(controller.view)
+    #expect(!controller.handleTerminalKeyEvent(event, source: terminal))
+    window.makeFirstResponder(terminal)
+    terminal.send(txt: "stty -icanon -echo; printf ready > ready; dd bs=1 count=1 of=key 2>/dev/null; stty sane\n")
+    for _ in 0..<100 {
+        if FileManager.default.fileExists(atPath: folder.appendingPathComponent("ready").path) { break }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("ready").path))
+    #expect(controller.handleTerminalKeyEvent(event, source: terminal))
+    for _ in 0..<100 {
+        if let bytes = try? Data(contentsOf: folder.appendingPathComponent("key")), bytes == Data([11]) { return }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    Issue.record("Ctrl+K did not reach the focused terminal process")
+}
+
+@MainActor
+@Test func contextRegistrationFollowsTerminalLifetimeAndTransfers() throws {
+    _ = NSApplication.shared
+    let source = OakTerminalPanelController()
+    let destination = OakTerminalPanelController()
+    var owners: [UUID: String] = [:]
+    var closed: [UUID] = []
+    source.contextEnvironmentProvider = { owners[$0] = "source"; return [:] }
+    destination.contextEnvironmentProvider = { owners[$0] = "destination"; return [:] }
+    source.contextSessionClosed = { closed.append($0); owners.removeValue(forKey: $0) }
+    destination.contextSessionClosed = { closed.append($0); owners.removeValue(forKey: $0) }
+    source.startSession()
+    let identifier = try #require(source.sessionIdentifiers.first)
+    #expect(owners[identifier] == "source")
+    source.transferSession(identifier: identifier, to: destination, at: 0)
+    #expect(owners[identifier] == "destination")
+    source.stopSession()
+    #expect(closed.isEmpty)
+    destination.stopSession()
+    #expect(closed == [identifier])
+    #expect(owners.isEmpty)
+}
+
 /// A plain sh without rc files, so results do not depend on the user's login shell, prompt plugins or dotfiles.
 @MainActor
 func makeTerminalController() -> OakTerminalPanelController {

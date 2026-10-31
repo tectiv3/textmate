@@ -1,7 +1,11 @@
+#import "AgentStatusTabSource.h"
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #import <OakTabBarView/OakTabBarView.h>
 #import "../src/TerminalPanelViewController.h"
 #import "../src/DocumentWindowController.h"
+#import "../src/ProjectLayoutView.h"
+#import <FileBrowser/FileBrowserViewController.h>
 
 // A plain sh without rc files, so tests do not depend on the user's login shell or dotfiles.
 static TerminalPanelViewController* MakePanel (NSView* content)
@@ -30,6 +34,45 @@ static void LayOut (NSWindow* window, NSSize size)
 {
 	[window setContentSize:size];
 	[window.contentView layoutSubtreeIfNeeded];
+}
+
+void test_terminal_panel_open_project ()
+{
+	dispatch_sync(dispatch_get_main_queue(), ^{
+		@autoreleasepool
+		{
+			[NSApplication sharedApplication];
+			ProjectLayoutView* content = [[ProjectLayoutView alloc] initWithFrame:NSZeroRect];
+			content.documentView = [[NSView alloc] initWithFrame:NSZeroRect];
+			[content.documentView.heightAnchor constraintGreaterThanOrEqualToConstant:25].active = YES;
+			TerminalPanelViewController* controller = MakePanel(content);
+			NSView* split = controller.view;
+			NSWindow* window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1000, 700) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+			window.releasedWhenClosed = NO;
+			split.translatesAutoresizingMaskIntoConstraints = NO;
+			[window.contentView addSubview:split];
+			[NSLayoutConstraint activateConstraints:@[
+				[split.leftAnchor constraintEqualToAnchor:window.contentView.leftAnchor],
+				[split.rightAnchor constraintEqualToAnchor:window.contentView.rightAnchor],
+				[split.topAnchor constraintEqualToAnchor:window.contentView.topAnchor],
+				[split.bottomAnchor constraintEqualToAnchor:window.contentView.bottomAnchor],
+			]];
+			// Project restoration adds the browser before the window's first layout pass.
+			[window.contentView updateConstraintsForSubtreeIfNeeded];
+			controller.panelHeight = 220;
+			FileBrowserViewController* browser = [[FileBrowserViewController alloc] init];
+			CGFloat minimumBrowserHeight = browser.view.fittingSize.height;
+			content.fileBrowserView = browser.view;
+			[window.contentView updateConstraintsForSubtreeIfNeeded];
+			[content layoutSubtreeIfNeeded];
+			OAK_ASSERT(NSHeight(browser.view.frame) >= minimumBrowserHeight);
+			[window setContentSize:NSMakeSize(1100, 700)];
+			[window.contentView layoutSubtreeIfNeeded];
+			OAK_ASSERT(NSHeight(browser.view.frame) >= minimumBrowserHeight);
+			OAK_ASSERT(NSHeight(content.frame) == NSHeight(split.bounds));
+			[window close];
+		}
+	});
 }
 
 void test_terminal_panel_layout ()
@@ -292,3 +335,92 @@ void test_terminal_attention_drives_window_subtitle ()
 	});
 }
 #endif
+
+// `updateStatus` starts the spinner for OakTabStatusWorking and stops it otherwise (OakTabBarView.mm:520-521),
+// so counting calls to those public methods observes the contract directly instead of the animation state.
+static NSCountedSet* StartedSpinners = nil;
+static NSCountedSet* StoppedSpinners = nil;
+static IMP OriginalStartAnimation = NULL;
+static IMP OriginalStopAnimation  = NULL;
+
+static void CountStartAnimation (id self, SEL _cmd, id sender)
+{
+	@synchronized(StartedSpinners) { [StartedSpinners addObject:self]; }
+	((void(*)(id, SEL, id))OriginalStartAnimation)(self, _cmd, sender);
+}
+
+static void CountStopAnimation (id self, SEL _cmd, id sender)
+{
+	@synchronized(StoppedSpinners) { [StoppedSpinners addObject:self]; }
+	((void(*)(id, SEL, id))OriginalStopAnimation)(self, _cmd, sender);
+}
+
+static void InstallAnimationCounters ()
+{
+	StartedSpinners = [NSCountedSet new];
+	StoppedSpinners = [NSCountedSet new];
+	Method start = class_getInstanceMethod(NSProgressIndicator.class, @selector(startAnimation:));
+	Method stop  = class_getInstanceMethod(NSProgressIndicator.class, @selector(stopAnimation:));
+	OAK_ASSERT(start != NULL && stop != NULL);
+	OriginalStartAnimation = method_setImplementation(start, (IMP)CountStartAnimation);
+	OriginalStopAnimation  = method_setImplementation(stop,  (IMP)CountStopAnimation);
+}
+
+static void RemoveAnimationCounters ()
+{
+	method_setImplementation(class_getInstanceMethod(NSProgressIndicator.class, @selector(startAnimation:)), OriginalStartAnimation);
+	method_setImplementation(class_getInstanceMethod(NSProgressIndicator.class, @selector(stopAnimation:)),  OriginalStopAnimation);
+}
+
+static NSUInteger StartCalls (NSProgressIndicator* spinner)
+{
+	@synchronized(StartedSpinners) { return [StartedSpinners countForObject:spinner]; }
+}
+
+static NSUInteger StopCalls (NSProgressIndicator* spinner)
+{
+	@synchronized(StoppedSpinners) { return [StoppedSpinners countForObject:spinner]; }
+}
+
+void test_terminal_tab_status_presentation ()
+{
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        [NSApplication sharedApplication];
+        AgentStatusTabSource* source = [AgentStatusTabSource new];
+        source.identifier = NSUUID.UUID;
+        source.status = OakTabStatusWorking;
+        source.statusDescription = @"Working";
+        OakTabBarView* bar = [[OakTabBarView alloc] initWithFrame:NSMakeRect(0, 0, 400, 23)];
+        bar.dataSource = source;
+        InstallAnimationCounters();
+        [bar reloadData];
+        [bar layoutSubtreeIfNeeded];
+        NSView* tab = nil;
+        for(NSView* view in bar.subviews)
+            if([view.accessibilityLabel isEqualToString:@"Agent, Working"]) tab = view;
+        OAK_ASSERT(tab != nil);
+        OAK_ASSERT([tab.toolTip isEqualToString:@"Working"]);
+        // The spinner is a direct subview of the tab (OakTabBarView.mm:293).
+        NSProgressIndicator* spinner = nil;
+        for(NSView* view in tab.subviews)
+            if([view isKindOfClass:NSProgressIndicator.class]) spinner = (NSProgressIndicator*)view;
+        OAK_ASSERT(spinner != nil);
+        NSUInteger workingStarts = StartCalls(spinner);
+        OAK_ASSERT(workingStarts > 0);
+        source.status = OakTabStatusBlocked;
+        source.statusDescription = @"Needs approval";
+        [bar reloadData];
+        OAK_ASSERT([tab.accessibilityLabel isEqualToString:@"Agent, Needs approval"]);
+        OAK_ASSERT([tab.toolTip isEqualToString:@"Needs approval"]);
+        OAK_ASSERT(StopCalls(spinner) > 0);
+        OAK_ASSERT(StartCalls(spinner) == workingStarts);
+        NSUInteger stoppedCalls = StopCalls(spinner);
+        source.status = OakTabStatusNone;
+        source.statusDescription = @"";
+        [bar reloadData];
+        [bar layoutSubtreeIfNeeded];
+        OAK_ASSERT([tab.accessibilityLabel isEqualToString:@"Agent"]);
+        OAK_ASSERT(StopCalls(spinner) > stoppedCalls);
+        RemoveAnimationCounters();
+    });
+}

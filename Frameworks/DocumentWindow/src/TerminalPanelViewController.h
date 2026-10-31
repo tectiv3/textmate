@@ -13,6 +13,8 @@ extern NSString* const kTerminalPanelPositionBottom;
 @property (nonatomic) BOOL panelVisible;
 @property (nonatomic, copy) NSString* (^terminalDirectoryProvider)(void);
 @property (nonatomic, copy) NSDictionary<NSString*, NSString*>* (^terminalEnvironmentProvider)(NSString* directory); // base environment for new shells
+@property (nonatomic, copy) NSDictionary<NSString*, NSString*>* (^contextEnvironmentProvider)(NSUUID*);
+@property (nonatomic, copy) void (^contextSessionClosed)(NSUUID*);
 @property (nonatomic, copy) NSString* panelPosition; // left, right, bottom
 @property (nonatomic) CGFloat panelWidth;
 @property (nonatomic) CGFloat panelHeight;
@@ -37,7 +39,7 @@ extern NSString* const kTerminalPanelPositionBottom;
 - (void)startTerminal; // starts the first shell in the directory from terminalDirectoryProvider
 - (void)focusTerminal;
 - (void)applyTerminalFont:(NSFont*)font;
-- (void)applyTerminalBackground:(NSColor*)background foreground:(NSColor*)foreground caret:(NSColor*)caret selection:(NSColor*)selection;
+- (void)applyTerminalBackground:(NSColor*)background foreground:(NSColor*)foreground caret:(NSColor*)caret selection:(NSColor*)selection syntaxColors:(NSArray<NSColor*>*)syntaxColors;
 @property (nonatomic, readonly) BOOL terminalHasRunningWork; // a session is running a foreground program
 - (void)confirmTerminalCloseInWindow:(NSWindow*)window completionHandler:(void(^)(BOOL canClose))callback; // sheet on window; immediate when idle
 - (void)stopTerminal;
