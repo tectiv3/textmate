@@ -102,6 +102,7 @@ file(GLOB _fw_res
   "${CMAKE_SOURCE_DIR}/Frameworks/DocumentWindow/resources/*.png"
   "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.html"
   "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.js"
+  "${CMAKE_SOURCE_DIR}/Frameworks/HTMLOutput/resources/*.css"
   "${CMAKE_SOURCE_DIR}/Applications/textmate-mcp/resources/*.js"
   "${CMAKE_SOURCE_DIR}/Frameworks/scm/resources/*.xslt"
 )

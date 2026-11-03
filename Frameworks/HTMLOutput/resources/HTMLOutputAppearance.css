@@ -1,0 +1,106 @@
+/* Shared presentation for local bundle results. Keep bundle layout and behaviour intact. */
+:root {
+  color-scheme: light dark;
+  --tm-output-background: #ffffff;
+  --tm-output-text: #1d1d1f;
+  --tm-output-secondary: #636366;
+  --tm-output-surface: #f5f5f7;
+  --tm-output-border: #d2d2d7;
+  --tm-output-link: #0066cc;
+  --tm-output-added: #e4f4e8;
+  --tm-output-deleted: #fce8e6;
+  --tm-output-modified: #fff3cd;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tm-output-background: #1e1e1e;
+    --tm-output-text: #f5f5f7;
+    --tm-output-secondary: #aeaeb2;
+    --tm-output-surface: #2c2c2e;
+    --tm-output-border: #48484a;
+    --tm-output-link: #64aaff;
+    --tm-output-added: #203e2b;
+    --tm-output-deleted: #492a2a;
+    --tm-output-modified: #463d24;
+  }
+}
+html, body {
+  background: var(--tm-output-background) !important;
+  color: var(--tm-output-text) !important;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  margin: 16px !important;
+}
+p, div, span, li, blockquote, dt, dd, th, td, label, summary, small, strong, em, a {
+  font-family: inherit !important;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif !important;
+  color: var(--tm-output-text) !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  text-shadow: none !important;
+}
+pre, code, tt, kbd, samp, table.codediff, table.codediff td {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+a { color: var(--tm-output-link) !important; }
+a:hover { text-decoration: underline; }
+hr { border: 0; border-top: 1px solid var(--tm-output-border); }
+input, button, select, textarea {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif !important;
+  font-size: 13px !important;
+  color: var(--tm-output-text);
+  accent-color: var(--tm-output-link);
+}
+::selection { background: Highlight; color: HighlightText; }
+/* Git bundle's summary rows and expandable diff controls. */
+.infobox, table.codediff thead, table.codediff thead .line-numbers,
+table.codediff .cut-line, table.codediff .line-num-cut,
+table.codediff .line-numbers, span.tag {
+  background: var(--tm-output-surface) !important;
+  color: var(--tm-output-secondary) !important;
+  border-color: var(--tm-output-border) !important;
+}
+.infobox {
+  padding: 10px 12px !important;
+  border: 1px solid var(--tm-output-border) !important;
+  border-radius: 7px;
+}
+.infobox strong { color: var(--tm-output-text); font-weight: 600; }
+.expand_link {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+  border: 1px solid var(--tm-output-border) !important;
+  background: var(--tm-output-background) !important;
+  border-radius: 4px;
+  min-width: 16px;
+  text-align: center;
+}
+/* The bundle explicitly paints unchanged code cells white. Pair their background
+   with the inherited text colour; changing only the table leaves white on white. */
+table.codediff { border-color: var(--tm-output-border) !important; }
+table tr td.code {
+  background: var(--tm-output-background) !important;
+  color: var(--tm-output-text) !important;
+}
+table tr td.highlighted {
+  background: var(--tm-output-modified) !important;
+  color: var(--tm-output-text) !important;
+}
+table.codediff td.del, table.sidebyside td.del del {
+  background: var(--tm-output-deleted) !important;
+  color: var(--tm-output-text) !important;
+}
+table.codediff td.ins, table.sidebyside td.ins ins {
+  background: var(--tm-output-added) !important;
+  color: var(--tm-output-text) !important;
+}
+table.sidebyside tbody.mod td, table.sidebyside tbody.mod td ins, table.sidebyside tbody.mod td del {
+  background: var(--tm-output-modified) !important;
+  color: var(--tm-output-text) !important;
+}
