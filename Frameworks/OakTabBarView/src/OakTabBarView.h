@@ -24,6 +24,12 @@ typedef NS_ENUM(NSInteger, OakTabStatus) {
 - (void)tabBarViewDidDoubleClick:(OakTabBarView*)aTabBarView;
 - (NSMenu*)menuForTabBarView:(OakTabBarView*)aTabBarView;
 
+// Command-clicking a tab edits its title in place when the delegate returns YES.
+// An empty title is passed through so the delegate can treat it as "revert to the default";
+// a nil title means the user cancelled with Escape (sent so the delegate can restore focus).
+- (BOOL)tabBarView:(OakTabBarView*)aTabBarView shouldRenameIndex:(NSUInteger)anIndex;
+- (void)tabBarView:(OakTabBarView*)aTabBarView didRenameIndex:(NSUInteger)anIndex toTitle:(NSString*)aTitle;
+
 // Methods sent to the delegate which the tab was dragged to
 - (BOOL)performDropOfTabItem:(NSUUID*)tabItemUUID fromTabBar:(OakTabBarView*)sourceTabBar index:(NSUInteger)dragIndex toTabBar:(OakTabBarView*)destTabBar index:(NSUInteger)droppedIndex operation:(NSDragOperation)operation;
 

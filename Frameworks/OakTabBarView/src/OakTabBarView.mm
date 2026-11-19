@@ -171,7 +171,7 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @class OakTabBarView;
 @class OakTabFrame;
 
-@interface OakTabView : NSView <NSAccessibilityRadioButton>
+@interface OakTabView : NSView <NSAccessibilityRadioButton, NSTextFieldDelegate>
 @property (nonatomic, weak) OakTabBarView* tabBarView;
 @property (nonatomic) OakTabItem* tabItem;
 
@@ -204,6 +204,10 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 
 @property (nonatomic) NSTrackingArea* trackingArea;
 @property (nonatomic) NSPoint mouseDownLocation;
+
+@property (nonatomic) NSTextField* renameField;
+@property (nonatomic) BOOL renameCancelled;
+- (void)beginRenaming;
 @end
 
 @interface OakTabBarView () <NSAccessibilityGroup, NSDraggingSource>
@@ -223,6 +227,8 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @property (nonatomic, getter = isDragging) BOOL dragging;
 - (void)didClickCloseButtonForTabView:(OakTabView*)tabView;
 - (void)didClickOverflorButtonForTabView:(OakTabView*)tabView;
+- (BOOL)didCommandClickTabView:(OakTabView*)tabView;
+- (void)tabView:(OakTabView*)tabView didEndRenamingWithTitle:(NSString*)title;
 - (NSMenu*)menuForTabView:(OakTabView*)tabView withEvent:(NSEvent*)anEvent;
 
 @property (nonatomic) NSArray<OakTabFrame*>* fromLayout;
@@ -614,6 +620,13 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (void)mouseDown:(NSEvent*)anEvent
 {
+	// A click anywhere in the tab bar outside an open rename field commits it, including clicks on blank
+	// tab bar space, which would otherwise leave the field editor active.
+	NSTextView* editor = [self.window.firstResponder isKindOfClass:NSTextView.class] ? (NSTextView*)self.window.firstResponder : nil;
+	// The blank-space background view has no tabBarView, so find the owning bar through the view hierarchy.
+	NSView* tabBar = self.tabBarView ?: [self.superview isKindOfClass:OakTabBarView.class] ? self.superview : nil;
+	if(tabBar && editor.isFieldEditor && [editor.delegate isKindOfClass:NSTextField.class] && [(NSTextField*)editor.delegate isDescendantOf:tabBar])
+		[self.window makeFirstResponder:nil];
 	_mouseDownLocation = anEvent.locationInWindow;
 }
 
@@ -635,10 +648,65 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 {
 	if(NSEqualPoints(_mouseDownLocation, NSZeroPoint)) // Ignore mouse up after a dragging session
 		return;
+	// Command-click renames when the delegate supports it, otherwise it is an ordinary click.
+	else if(anEvent.clickCount == 1 && (anEvent.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagControl)) == NSEventModifierFlagCommand && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5 && [self.tabBarView didCommandClickTabView:self])
+		return;
 	else if(anEvent.clickCount == 1 && !self.isSelected && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5)
 		[NSApp sendAction:self.action to:self.target from:self];
 	else if(anEvent.clickCount == 2)
 		[NSApp sendAction:self.doubleAction to:self.target from:self];
+}
+
+- (void)beginRenaming
+{
+	if(_renameField)
+		return;
+
+	NSTextField* field = [NSTextField textFieldWithString:self.tabItem.title ?: @""];
+	field.font            = _textField.font;
+	field.alignment       = NSTextAlignmentCenter;
+	field.bezeled         = NO;
+	field.bordered        = NO;
+	field.drawsBackground = NO;
+	field.focusRingType   = NSFocusRingTypeNone;
+	field.delegate        = self;
+	field.cell.scrollable = YES;
+	field.cell.usesSingleLineMode = YES;
+	field.translatesAutoresizingMaskIntoConstraints = NO;
+	field.accessibilityLabel = @"Tab Title";
+	[self addSubview:field positioned:NSWindowAbove relativeTo:nil];
+	[NSLayoutConstraint activateConstraints:@[
+		[field.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+		[field.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
+		[field.centerYAnchor constraintEqualToAnchor:_textField.centerYAnchor],
+	]];
+
+	_renameField     = field;
+	_renameCancelled = NO;
+	_textField.hidden = YES;
+	[self.window makeFirstResponder:field];
+	[field.currentEditor selectAll:nil];
+}
+
+- (BOOL)control:(NSControl*)control textView:(NSTextView*)textView doCommandBySelector:(SEL)command
+{
+	if(control != _renameField || command != @selector(cancelOperation:))
+		return NO;
+	_renameCancelled = YES;
+	[self.window makeFirstResponder:nil];
+	return YES;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification*)aNotification
+{
+	if(aNotification.object != _renameField)
+		return;
+
+	NSString* title = _renameCancelled ? nil : _renameField.stringValue;
+	[_renameField removeFromSuperview];
+	_renameField      = nil;
+	_textField.hidden = NO;
+	[self.tabBarView tabView:self didEndRenamingWithTitle:title];
 }
 
 - (void)didClickCloseButton:(id)sender
@@ -993,6 +1061,22 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	self.selectedTabIndex = index;
 	if([_delegate respondsToSelector:@selector(tabBarView:shouldSelectIndex:)])
 		[_delegate tabBarView:self shouldSelectIndex:index];
+}
+
+- (BOOL)didCommandClickTabView:(OakTabView*)tabView
+{
+	NSInteger index = [_tabItems indexOfObject:tabView.tabItem];
+	if(index == NSNotFound || ![_delegate respondsToSelector:@selector(tabBarView:shouldRenameIndex:)] || ![_delegate tabBarView:self shouldRenameIndex:index])
+		return NO;
+	[tabView beginRenaming];
+	return YES;
+}
+
+- (void)tabView:(OakTabView*)tabView didEndRenamingWithTitle:(NSString*)title
+{
+	NSInteger index = [_tabItems indexOfObject:tabView.tabItem];
+	if(index != NSNotFound && [_delegate respondsToSelector:@selector(tabBarView:didRenameIndex:toTitle:)])
+		[_delegate tabBarView:self didRenameIndex:index toTitle:title];
 }
 
 - (void)didDoubleClickTabView:(OakTabView*)tabView
