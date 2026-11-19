@@ -71,6 +71,13 @@
 		self.detachSessionHandler(self.controller.sessionIdentifiers[index]);
 }
 - (void)tabBarViewDidDoubleClick:(OakTabBarView*)bar { [self.controller newTerminal]; }
+- (BOOL)tabBarView:(OakTabBarView*)bar shouldRenameIndex:(NSUInteger)index { return index < self.controller.sessionIdentifiers.count; }
+- (void)tabBarView:(OakTabBarView*)bar didRenameIndex:(NSUInteger)index toTitle:(NSString*)title
+{
+	if(title)
+		[self.controller renameSessionAt:index title:title];
+	[self.controller focusTerminal];
+}
 
 - (void)performCloseTab:(OakTabBarView*)sender
 {
