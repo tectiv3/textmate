@@ -214,6 +214,7 @@ final class FileLinkTerminalView: LocalProcessTerminalView {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
         clearHighlight()
         guard window != nil else { return }
+        registerForDraggedTypes([.fileURL])
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .flagsChanged, .scrollWheel, .leftMouseDragged]) { [weak self] event in
             if event.type == .keyDown {
                 if let self, self.owner?.handleTerminalKeyEvent(event, source: self) == true { return nil }
@@ -323,6 +324,22 @@ final class FileLinkTerminalView: LocalProcessTerminalView {
            fileHit(at: convert(event.locationInWindow, from: nil))?.reference == pressedLink {
             openFile(pressedLink)
         }
+    }
+
+    // Dropped files are pasted as shell-quoted paths, bracketed when the foreground program asked for it.
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        TerminalFileDrop.canAccept(sender.draggingPasteboard) ? TerminalFileDrop.operation(allowedBySource: sender.draggingSourceOperationMask) : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let text = TerminalFileDrop.text(for: TerminalFileDrop.fileURLs(from: sender.draggingPasteboard)) else { return false }
+        window?.makeFirstResponder(self)
+        pasteText(text)
+        return true
     }
 
     private func openFile(_ reference: TerminalFileReference) {

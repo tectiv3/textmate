@@ -54,6 +54,9 @@ private final class TerminalContainer: NSView {
         let uuid: UUID
         let terminal: LocalProcessTerminalView
         var title: String
+        /// Set by the user renaming the tab; wins over titles the shell reports until cleared.
+        var customTitle: String?
+        var displayTitle: String { customTitle ?? title }
         var attention = TerminalAttention()
         var agentStatus = TerminalAgentStatus()
     }
@@ -70,7 +73,23 @@ private final class TerminalContainer: NSView {
     @objc public var sessionToolTips: [String] { sessions.map(\.attention.toolTip) }
     /// Worst unseen state across this panel's sessions, as window subtitle text; nil when nothing needs the user.
     @objc public var attentionSubtitle: String? { TerminalAttention.subtitle(for: sessions.map(\.attention)) }
-    @objc public var sessionTitles: [String] { sessions.map(\.title) }
+    @objc public var sessionTitles: [String] { sessions.map(\.displayTitle) }
+
+    /// Pins a user-chosen title on a tab; an empty or whitespace-only title reverts to the one the shell reports.
+    @objc public func renameSession(at index: Int, title: String) {
+        guard sessions.indices.contains(index) else { return }
+        sessions[index].customTitle = Self.sanitizedTitle(title)
+        rebuildTabs()
+    }
+
+    /// Strips control characters (general category Cc) and surrounding whitespace, capped at 120 characters; nil when
+    /// nothing is left. Format characters such as U+200D stay, because emoji sequences are built from them.
+    nonisolated static func sanitizedTitle(_ title: String) -> String? {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: title.unicodeScalars.filter { $0.properties.generalCategory != .control })
+        let cleaned = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(120))
+    }
     @objc public var sessionStatusValues: [NSNumber] { sessions.map { NSNumber(value: $0.agentStatus.value) } }
     @objc public var sessionStatusDescriptions: [String] { sessions.map { $0.agentStatus.description } }
     @objc public var selectedSessionIndex: Int { sessions.firstIndex { $0.id == selectedID } ?? NSNotFound }
@@ -114,7 +133,7 @@ private final class TerminalContainer: NSView {
         destination.started = true
         session.terminal.processDelegate = destination
         (session.terminal as? FileLinkTerminalView)?.owner = destination
-        destination.sessions.insert(Session(id: newID, uuid: session.uuid, terminal: session.terminal, title: session.title, attention: session.attention, agentStatus: session.agentStatus), at: min(max(0, insertionIndex), destination.sessions.count))
+        destination.sessions.insert(Session(id: newID, uuid: session.uuid, terminal: session.terminal, title: session.title, customTitle: session.customTitle, attention: session.attention, agentStatus: session.agentStatus), at: min(max(0, insertionIndex), destination.sessions.count))
         _ = destination.contextEnvironmentProvider?(session.uuid)
         destination.applyFont(destination.terminalFont)
         destination.updateTerminalColors()
@@ -431,8 +450,7 @@ private final class TerminalContainer: NSView {
     public func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     public func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         guard let index = sessions.firstIndex(where: { $0.terminal === source }) else { return }
-        let title = title.components(separatedBy: .controlCharacters).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        sessions[index].title = title.isEmpty ? Self.defaultTitle(forID: sessions[index].id) : String(title.prefix(120))
+        sessions[index].title = Self.sanitizedTitle(title) ?? Self.defaultTitle(forID: sessions[index].id)
         rebuildTabs()
     }
     public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
