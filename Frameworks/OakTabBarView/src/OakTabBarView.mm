@@ -207,7 +207,11 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 
 @property (nonatomic) NSTextField* renameField;
 @property (nonatomic) BOOL renameCancelled;
+@property (nonatomic) BOOL endingRename;
+@property (nonatomic) NSString* endedRenameTitle;
 - (void)beginRenaming;
+- (void)endRenamingAndCommit:(BOOL)commit;
+- (void)abandonRenaming;
 @end
 
 @interface OakTabBarView () <NSAccessibilityGroup, NSDraggingSource>
@@ -227,7 +231,8 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @property (nonatomic, getter = isDragging) BOOL dragging;
 - (void)didClickCloseButtonForTabView:(OakTabView*)tabView;
 - (void)didClickOverflorButtonForTabView:(OakTabView*)tabView;
-- (BOOL)didCommandClickTabView:(OakTabView*)tabView;
+- (BOOL)canRenameTabView:(OakTabView*)tabView;
+- (BOOL)beginRenamingTabView:(OakTabView*)tabView;
 - (void)tabView:(OakTabView*)tabView didEndRenamingWithTitle:(NSString*)title;
 - (NSMenu*)menuForTabView:(OakTabView*)tabView withEvent:(NSEvent*)anEvent;
 
@@ -533,6 +538,18 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	return [NSApp sendAction:self.action to:self.target from:self];
 }
 
+- (NSArray<NSAccessibilityCustomAction*>*)accessibilityCustomActions
+{
+	if(![self.tabBarView canRenameTabView:self])
+		return [super accessibilityCustomActions];
+	return @[ [[NSAccessibilityCustomAction alloc] initWithName:@"Rename" target:self selector:@selector(accessibilityRename)] ];
+}
+
+- (BOOL)accessibilityRename
+{
+	return [self.tabBarView beginRenamingTabView:self];
+}
+
 - (BOOL)accessibilityPerformShowMenu
 {
 	[[self menuForEvent:NSApp.currentEvent] popUpMenuPositioningItem:nil atLocation:NSZeroPoint inView:self];
@@ -625,8 +642,9 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	NSTextView* editor = [self.window.firstResponder isKindOfClass:NSTextView.class] ? (NSTextView*)self.window.firstResponder : nil;
 	// The blank-space background view has no tabBarView, so find the owning bar through the view hierarchy.
 	NSView* tabBar = self.tabBarView ?: [self.superview isKindOfClass:OakTabBarView.class] ? self.superview : nil;
-	if(tabBar && editor.isFieldEditor && [editor.delegate isKindOfClass:NSTextField.class] && [(NSTextField*)editor.delegate isDescendantOf:tabBar])
-		[self.window makeFirstResponder:nil];
+	OakTabView* renamingTab = editor.isFieldEditor && [editor.delegate isKindOfClass:NSTextField.class] ? (OakTabView*)((NSTextField*)editor.delegate).superview : nil;
+	if(tabBar && [renamingTab isKindOfClass:OakTabView.class] && renamingTab.renameField == editor.delegate && [renamingTab isDescendantOf:tabBar])
+		[renamingTab endRenamingAndCommit:YES];
 	_mouseDownLocation = anEvent.locationInWindow;
 }
 
@@ -646,12 +664,15 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (void)mouseUp:(NSEvent*)anEvent
 {
+	BOOL isClick = anEvent.clickCount == 1 && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5;
+	NSEventModifierFlags modifiers = anEvent.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagControl);
+
 	if(NSEqualPoints(_mouseDownLocation, NSZeroPoint)) // Ignore mouse up after a dragging session
 		return;
 	// Command-click renames when the delegate supports it, otherwise it is an ordinary click.
-	else if(anEvent.clickCount == 1 && (anEvent.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagControl)) == NSEventModifierFlagCommand && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5 && [self.tabBarView didCommandClickTabView:self])
+	else if(isClick && modifiers == NSEventModifierFlagCommand && [self.tabBarView beginRenamingTabView:self])
 		return;
-	else if(anEvent.clickCount == 1 && !self.isSelected && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5)
+	else if(isClick && !self.isSelected)
 		[NSApp sendAction:self.action to:self.target from:self];
 	else if(anEvent.clickCount == 2)
 		[NSApp sendAction:self.doubleAction to:self.target from:self];
@@ -685,28 +706,74 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	_renameCancelled = NO;
 	_textField.hidden = YES;
 	[self.window makeFirstResponder:field];
-	[field.currentEditor selectAll:nil];
+}
+
+// Ends the edit ourselves and reports it only once makeFirstResponder: has returned: a delegate moving focus
+// from inside controlTextDidEndEditing: would be overridden when that outer call completes.
+- (void)endRenamingAndCommit:(BOOL)commit
+{
+	if(!_renameField)
+		return;
+	_renameCancelled = !commit;
+	_endingRename    = YES;
+	[self.window makeFirstResponder:nil];
+	_endingRename    = NO;
+	if(_renameField) // The field refused to give up first responder, so the edit continues.
+	{
+		_renameCancelled = NO;
+		return;
+	}
+	NSString* title = _endedRenameTitle;
+	_endedRenameTitle = nil;
+	[self.tabBarView tabView:self didEndRenamingWithTitle:title];
+}
+
+// The tab is being removed during layout (pushed into overflow or closed). AppKit would end the edit as if it
+// were committed, so cancel it first and tell the delegate after the layout pass, not re-entrantly inside it.
+- (void)abandonRenaming
+{
+	if(!_renameField)
+		return;
+	_renameCancelled = YES;
+	_endingRename    = YES;
+	[self.window makeFirstResponder:nil];
+	_endingRename    = NO;
+	if(_renameField)
+		[self closeRenameField];
+	_endedRenameTitle = nil;
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[self.tabBarView tabView:self didEndRenamingWithTitle:nil];
+	});
+}
+
+- (void)closeRenameField
+{
+	[_renameField removeFromSuperview];
+	_renameField      = nil;
+	_textField.hidden = NO;
 }
 
 - (BOOL)control:(NSControl*)control textView:(NSTextView*)textView doCommandBySelector:(SEL)command
 {
 	if(control != _renameField || command != @selector(cancelOperation:))
 		return NO;
-	_renameCancelled = YES;
-	[self.window makeFirstResponder:nil];
+	[self endRenamingAndCommit:NO];
 	return YES;
 }
 
+// Reached directly when AppKit ends the edit (Return, Tab, or focus moving to another view); the delegate can
+// move focus from here because no makeFirstResponder: call of ours is in progress.
 - (void)controlTextDidEndEditing:(NSNotification*)aNotification
 {
 	if(aNotification.object != _renameField)
 		return;
 
 	NSString* title = _renameCancelled ? nil : _renameField.stringValue;
-	[_renameField removeFromSuperview];
-	_renameField      = nil;
-	_textField.hidden = NO;
-	[self.tabBarView tabView:self didEndRenamingWithTitle:title];
+	[self closeRenameField];
+	if(_endingRename)
+		_endedRenameTitle = title;
+	else
+		[self.tabBarView tabView:self didEndRenamingWithTitle:title];
 }
 
 - (void)didClickCloseButton:(id)sender
@@ -1063,13 +1130,23 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 		[_delegate tabBarView:self shouldSelectIndex:index];
 }
 
-- (BOOL)didCommandClickTabView:(OakTabView*)tabView
+- (BOOL)canRenameTabView:(OakTabView*)tabView
 {
-	NSInteger index = [_tabItems indexOfObject:tabView.tabItem];
-	if(index == NSNotFound || ![_delegate respondsToSelector:@selector(tabBarView:shouldRenameIndex:)] || ![_delegate tabBarView:self shouldRenameIndex:index])
+	NSInteger index = tabView ? [_tabItems indexOfObject:tabView.tabItem] : NSNotFound;
+	return index != NSNotFound && [_delegate respondsToSelector:@selector(tabBarView:shouldRenameIndex:)] && [_delegate tabBarView:self shouldRenameIndex:index];
+}
+
+- (BOOL)beginRenamingTabView:(OakTabView*)tabView
+{
+	if(![self canRenameTabView:tabView])
 		return NO;
 	[tabView beginRenaming];
 	return YES;
+}
+
+- (BOOL)beginRenamingTabAtIndex:(NSUInteger)anIndex
+{
+	return anIndex < _tabItems.count && [self beginRenamingTabView:_tabItems[anIndex].tabView];
 }
 
 - (void)tabView:(OakTabView*)tabView didEndRenamingWithTitle:(NSString*)title
@@ -1500,6 +1577,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 	for(OakTabView* tabView in existingTabViews.allValues)
 	{
+		[tabView abandonRenaming];
 		tabView.tabItem.tabView = nil;
 		[tabView removeFromSuperview];
 	}

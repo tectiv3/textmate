@@ -8,6 +8,12 @@ enum TerminalFileDrop {
         pasteboard.canReadObject(forClasses: [NSURL.self], options: readOptions)
     }
 
+    /// The operation to report for a drop: the paths are only typed, so any operation the source offers will do, with
+    /// copy preferred. Finder offers only move while ⌘ is held, and refusing it would reject the drop without feedback.
+    static func operation(allowedBySource mask: NSDragOperation) -> NSDragOperation {
+        [.copy, .generic, .link, .move].first { mask.contains($0) } ?? []
+    }
+
     static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
         (pasteboard.readObjects(forClasses: [NSURL.self], options: readOptions) as? [URL] ?? []).filter(\.isFileURL)
     }

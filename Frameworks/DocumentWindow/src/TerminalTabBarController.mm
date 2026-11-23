@@ -119,6 +119,9 @@
 	newTab.target = self.controller;
 	if(index < 0 || index >= identifiers.count)
 		return menu;
+	NSMenuItem* rename = [menu addItemWithTitle:@"Rename Tab…" action:@selector(renameTabFromMenu:) keyEquivalent:@""];
+	rename.target = self;
+	rename.representedObject = identifiers[index];
 	NSMenuItem* move = [menu addItemWithTitle:@"Move Tab to New Window" action:@selector(detachTabFromMenu:) keyEquivalent:@""];
 	move.target = self;
 	move.representedObject = identifiers[index];
@@ -142,12 +145,23 @@
 {
 	if(item.action == @selector(detachTabFromMenu:))
 		return self.detachSessionHandler != nil && self.controller.sessionIdentifiers.count > 1;
-	return [item.representedObject count] > 0;
+	if(item.action == @selector(renameTabFromMenu:))
+		return [self.controller.sessionIdentifiers containsObject:item.representedObject];
+	if(item.action == @selector(closeTabsFromMenu:))
+		return [item.representedObject count] > 0;
+	return YES;
 }
 - (void)detachTabFromMenu:(NSMenuItem*)sender
 {
 	if(self.detachSessionHandler)
 		self.detachSessionHandler(sender.representedObject);
+}
+// A route to renaming besides command-click, reachable with VoiceOver (VO-⇧-M opens the tab's context menu).
+- (void)renameTabFromMenu:(NSMenuItem*)sender
+{
+	NSUInteger index = [self.controller.sessionIdentifiers indexOfObject:sender.representedObject];
+	if(index != NSNotFound)
+		[self.tabBar beginRenamingTabAtIndex:index];
 }
 - (void)closeTabsFromMenu:(NSMenuItem*)sender { [self.controller closeSessionsWithIdentifiers:sender.representedObject]; }
 @end

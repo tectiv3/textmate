@@ -22,7 +22,10 @@ import Testing
 @Test func terminalFileDropQuotingRoundTripsThroughShells() throws {
     let path = "/tmp/it's a \"file\" (1) $HOME `x` \\ & ; | < > * ? [a] {b,c} ~ ! # 日本語 cafe\u{301}"
     let quoted = try #require(TerminalFileDrop.quote(path))
-    let shells = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash", "/bin/ksh"].filter { FileManager.default.isExecutableFile(atPath: $0) }
+    let environment = ProcessInfo.processInfo.environment
+    let fish = (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/fish" }.first { FileManager.default.isExecutableFile(atPath: $0) }
+    let candidates = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash", "/bin/ksh", environment["SHELL"], fish].compactMap(\.self)
+    let shells = Array(Set(candidates.filter { FileManager.default.isExecutableFile(atPath: $0) })).sorted()
     #expect(!shells.isEmpty)
     for shell in shells {
         let process = Process()
@@ -50,8 +53,42 @@ import Testing
     #expect(TerminalFileDrop.text(for: TerminalFileDrop.fileURLs(from: pasteboard)) == "/tmp/dropped\\ file ")
 }
 
+@Test func terminalFileDropAcceptsAnyOperationTheSourceOffers() {
+    #expect(TerminalFileDrop.operation(allowedBySource: .every) == .copy)
+    #expect(TerminalFileDrop.operation(allowedBySource: .move) == .move)
+    #expect(TerminalFileDrop.operation(allowedBySource: [.link, .move]) == .link)
+    #expect(TerminalFileDrop.operation(allowedBySource: .generic) == .generic)
+    #expect(TerminalFileDrop.operation(allowedBySource: []) == [])
+}
+
+@Test func terminalTitleSanitizingKeepsEmojiSequences() {
+    #expect(OakTerminalPanelController.sanitizedTitle("👨\u{200D}💻 build") == "👨\u{200D}💻 build")
+    #expect(OakTerminalPanelController.sanitizedTitle("  a\u{07}b\u{1B}c\u{85}d\u{9B}  ") == "abcd")
+    #expect(OakTerminalPanelController.sanitizedTitle(" \u{07}\n ") == nil)
+    let long = String(repeating: "x", count: 119) + "👨\u{200D}💻" + "tail"
+    #expect(OakTerminalPanelController.sanitizedTitle(long) == String(repeating: "x", count: 119) + "👨\u{200D}💻")
+}
+
 @MainActor
-@Test func terminalTabRenameOverridesShellTitle() async throws {
+@Test func terminalTabRenameSurvivesTransferToAnotherPanel() throws {
+    _ = NSApplication.shared
+    let source = makeTerminalController()
+    let destination = makeTerminalController()
+    source.startSession()
+    destination.startSession()
+    defer { source.stopSession(); destination.stopSession() }
+    let terminal = try #require(source.terminal)
+    source.renameSession(at: 0, title: "Build server")
+    source.transferSession(identifier: source.sessionIdentifiers[0], to: destination, at: 0)
+    #expect(destination.sessionTitles.first == "Build server")
+    destination.setTerminalTitle(source: terminal, title: "shell title")
+    #expect(destination.sessionTitles.first == "Build server")
+    destination.renameSession(at: 0, title: "")
+    #expect(destination.sessionTitles.first == "shell title")
+}
+
+@MainActor
+@Test func terminalTabRenameOverridesShellTitle() throws {
     _ = NSApplication.shared
     let controller = makeTerminalController()
     controller.startSession()
@@ -67,4 +104,6 @@ import Testing
     #expect(controller.sessionTitles == ["later shell title"])
     controller.renameSession(at: 5, title: "out of range")
     #expect(controller.sessionTitles == ["later shell title"])
+    controller.renameSession(at: 0, title: String(repeating: "y", count: 200))
+    #expect(controller.sessionTitles == [String(repeating: "y", count: 120)])
 }

@@ -78,9 +78,17 @@ private final class TerminalContainer: NSView {
     /// Pins a user-chosen title on a tab; an empty or whitespace-only title reverts to the one the shell reports.
     @objc public func renameSession(at index: Int, title: String) {
         guard sessions.indices.contains(index) else { return }
-        let cleaned = title.components(separatedBy: .controlCharacters).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        sessions[index].customTitle = cleaned.isEmpty ? nil : String(cleaned.prefix(120))
+        sessions[index].customTitle = Self.sanitizedTitle(title)
         rebuildTabs()
+    }
+
+    /// Strips control characters (general category Cc) and surrounding whitespace, capped at 120 characters; nil when
+    /// nothing is left. Format characters such as U+200D stay, because emoji sequences are built from them.
+    nonisolated static func sanitizedTitle(_ title: String) -> String? {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: title.unicodeScalars.filter { $0.properties.generalCategory != .control })
+        let cleaned = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(120))
     }
     @objc public var sessionStatusValues: [NSNumber] { sessions.map { NSNumber(value: $0.agentStatus.value) } }
     @objc public var sessionStatusDescriptions: [String] { sessions.map { $0.agentStatus.description } }
@@ -442,8 +450,7 @@ private final class TerminalContainer: NSView {
     public func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     public func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         guard let index = sessions.firstIndex(where: { $0.terminal === source }) else { return }
-        let title = title.components(separatedBy: .controlCharacters).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        sessions[index].title = title.isEmpty ? Self.defaultTitle(forID: sessions[index].id) : String(title.prefix(120))
+        sessions[index].title = Self.sanitizedTitle(title) ?? Self.defaultTitle(forID: sessions[index].id)
         rebuildTabs()
     }
     public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {

@@ -328,7 +328,7 @@ final class FileLinkTerminalView: LocalProcessTerminalView {
 
     // Dropped files are pasted as shell-quoted paths, bracketed when the foreground program asked for it.
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        TerminalFileDrop.canAccept(sender.draggingPasteboard) ? .copy : []
+        TerminalFileDrop.canAccept(sender.draggingPasteboard) ? TerminalFileDrop.operation(allowedBySource: sender.draggingSourceOperationMask) : []
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
